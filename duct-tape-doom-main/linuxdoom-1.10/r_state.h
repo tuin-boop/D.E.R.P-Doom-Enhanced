@@ -32,6 +32,8 @@
 
 #ifdef __GNUG__
 #pragma interface
+extern void (*R_BFGHit)(mobj_t *ball,mobj_t *victim);
+
 #endif
 
 
@@ -109,6 +111,9 @@ extern void (*R_MuzzleFlash)(mobj_t *source, int weapon, int projectile);
 extern void (*R_WeaponAttack)(player_t *player);
 extern void (*R_WeaponAux)(int alt, int reload);
 // Renderer-only hitscan wall impact: side faces the shooter; x,y,z is the puff.
+extern void (*R_RocketImpact)(mobj_t *rocket);
+extern void (*R_DoorMotion)(sector_t *sector);
+extern void (*R_DoorDamage)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z, int broken);
 extern void (*R_WallImpact)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z);
 // Renderer-only hitscan blood: x,y,z is the blood spot, dx,dy the shot direction.
 extern void (*R_BloodHit)(mobj_t *target, fixed_t x, fixed_t y, fixed_t z, fixed_t dx, fixed_t dy, int damage);
@@ -149,6 +154,8 @@ extern int		sscount;
 extern visplane_t*	floorplane;
 extern visplane_t*	ceilingplane;
 
+
+extern void (*R_BFGHit)(mobj_t *ball,mobj_t *victim);
 
 #endif
 //-----------------------------------------------------------------------------

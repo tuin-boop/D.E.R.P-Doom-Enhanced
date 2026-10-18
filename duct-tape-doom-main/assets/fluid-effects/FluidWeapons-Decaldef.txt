@@ -1,0 +1,45 @@
+/***** Plasma Rifle Scorches ***********************************************/
+
+decal MRIntWPlasmaScorchLower1
+{
+	pic PLASMA1
+	shade "00 00 00"
+	x-scale .55
+	y-scale .55
+}
+
+decal MRIntWPlasmaScorch1
+{
+	pic PLASMA1
+	Shade "D0 C4 F9"
+	x-scale .55
+	y-scale .55
+	fullbright
+	animator GoAway
+	lowerdecal MRIntWPlasmaScorchLower1
+}
+
+decal MRIntWPlasmaScorchLower2
+{
+	pic PLASMA2
+	shade "00 00 00"
+	x-scale .55
+	y-scale .55
+}
+
+decal MRIntWPlasmaScorch2
+{
+	pic PLASMA2
+	Shade "D0 C4 F9"
+	x-scale .55
+	y-scale .55
+	fullbright
+	animator GoAway
+	lowerdecal MRIntWPlasmaScorchLower2
+}
+
+decalgroup MRIntWPlasmaScorch
+{
+	MRIntWPlasmaScorch1 1
+	MRIntWPlasmaScorch2 1
+}

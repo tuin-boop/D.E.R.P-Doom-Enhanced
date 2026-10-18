@@ -1,0 +1,19 @@
+Persistent pursuit (optional)
+
+F4 > Monster AI > Navigation > Persistent pursuit.
+Default: Off. Applies immediately and is stored with graphics settings.
+
+Alerted monsters without line of sight can search short routes around walls,
+follow the resulting waypoints, and retry blocked routes. It does not wake
+unaware monsters or change their attacks. Actual movement still uses Doom's
+collision, step, headroom and drop-off checks. Demos and network games keep
+the original chase behavior.
+
+Navigation is local, not a guarantee of solving every map. Searches are
+incremental (24 node expansions per tic globally, 160 per search), with
+bounded route storage. Routes reset on level changes and save loading.
+
+Validation: compared the user's AITEST E1M5 save with pursuit disabled/enabled.
+Disabled: the imp paced behind the wall. Enabled: it went around the passage.
+Incremental simulation measured 0.007 ms mean / 0.322 ms maximum per monster
+simulation tic in this scene; this is not a whole-frame FPS measurement.

@@ -120,6 +120,8 @@ struct Settings {
     int glossyScreens=1; // Monitor glass found in computer textures bulges, refracts the screen behind it and catches light.
     int glowingEyes=1; // The eyes painted into monster artwork glow in the dark, with bloom (sprite_eyes.h).
     int windowGlass=1; // Windows found in the map get glass that reflects and shatters when shot through.
+    int gunImpacts=1;
+    int doorSparks=1; // Cosmetic sparks along opening door tracks.
     int shootableLights=1; // Experiment: tech walls spark when shot; shots into a lamp or screen break its fixture and re-bake its light.
     int killShotsCarry=1; // With shootableLights: a hitscan shot that kills its target carries on to spark and break lights behind it.
     int glassReflections=1; // Experiment: the nearest window mirrors the world, drawn again like the liquid reflection.
@@ -127,6 +129,7 @@ struct Settings {
     int fluidGloves=0; int fluidBareHands=1; int fluidFastPistol=1;
     int combatNotices=1;
     int fluidWeapons=1,fluidSounds=1,fluidMonsters=1;
+    int persistentPursuit=0,aggressiveAI=0,advancedTactics=0;
     float fluidGloveRed=239,fluidGloveGreen=239,fluidGloveBlue=239;
     float fluidShadeRed=2,fluidShadeGreen=2,fluidShadeBlue=2;
     // Sound, though graphics.cfg keeps it: the mixer is told in applySettings.
@@ -170,7 +173,7 @@ extern float weaponProbe[24];
 extern std::vector<LightBlocker> lightBlockers;
 /* Texture keys: wall index >=0, WAD lump = -1-lump. */
 extern std::unordered_map<int,Image> images;
-extern std::map<int,std::vector<Vertex>> batches,shadowBatches,decalBatches;
+extern std::map<int,std::vector<Vertex>> batches,shadowBatches,decalBatches,effectBatches,effectAddBatches;
 // The sprites of the glass mirror pass, seen from the mirrored eye, the
 // player's own included (addThing in scene3d/geometry.cpp).
 extern std::map<int,std::vector<Vertex>> mirrorBatches;

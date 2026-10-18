@@ -1,0 +1,824 @@
+/*
+	Player puff and projectiles particle effects
+*/
+
+Class MRIntWeaps_ActorEffects: Thinker
+{
+	Actor Master;
+	TextureId ParTex, SmkTex;
+	
+	Static Void MRSpawnParticle(Color Col, TextureId Texture, int Flags=0, int Style=STYLE_None, int Life=1, double Size=1, Vector3 Pos=(0,0,0), Vector3 Vel=(0,0,0), Vector3 Accel=(0,0,0), Double Alpha=1, Double Fade=-1, Double SizeStep=0, Double Roll=0, Double RollVel=0)
+	{
+		FSpawnParticleParams p;
+		p.Accel = Accel;
+		p.Vel = Vel;
+		p.Pos = Pos;
+		p.StartRoll = Roll;
+		p.RollVel = RollVel;
+		
+		p.Texture = Texture;
+		p.Color1 = Col;
+		p.LifeTime = Life;
+		p.size = Size;
+		p.sizeStep = SizeStep;
+		p.startalpha = Alpha;
+		p.fadestep = Fade;
+		if(Fade==-1)p.FadeStep = Alpha/Max(1, Life-1);
+		
+		p.Flags = Flags;
+		p.Style = Style;
+		
+		Level.SpawnParticle(p);
+	}
+	
+	Double FaceCam(Actor Who=Null, Bool Pitch=false, Bool Sprite=false)
+	{
+		if(!Who)Who = Master;
+		
+		if(Pitch){
+			if(!Players[ConsolePlayer].Camera)Return Who.Pitch;
+		
+			Return Who.PitchTo(Players[ConsolePlayer].Camera, Who.Height*.5, Players[ConsolePlayer].ViewZ);
+		}
+		
+		if(!Players[ConsolePlayer].Camera)Return Who.Angle;
+		
+		if(Sprite)Return Players[ConsolePlayer].Camera.Angle+180;
+		
+		Return Who.AngleTo(Players[ConsolePlayer].Camera);
+	}
+	
+	Bool MRGPartsCheckDraw(Actor mo = Null)
+	{
+		Let Plr = Players[ConsolePlayer].Camera;
+		if(!Plr)Return true;
+		
+		if(!mo)mo = Master;
+		
+		if(!mo)Return true;
+		
+		Return (abs(Actor.DeltaAngle(Plr.Angle, Plr.AngleTo(mo)))<CVar.FindCVar("FOV").GetFloat()||Plr.Distance2D(mo)<Plr.Radius*2) && Plr.CheckSight(mo, SF_IGNOREWATERBOUNDARY|SF_SEEPASTBLOCKEVERYTHING|SF_IGNOREVISIBILITY);
+	}
+	
+	Static TextureId SetTexture(Bool Smoke = false, Bool VThink = false, Bool NoAdd = false)
+	{
+		int CVa;
+		if(Smoke)CVa = MRIntW_ParticleSmokeTexture;
+		else CVa = MRIntW_ParticleTexture;
+		
+		if(CVa<0){
+			if(VThink)CVa = 2-gl_particles_style;
+			else Return Texman.CheckForTexture("glpart");
+		}
+		
+		Switch(CVa)
+		{
+			Case 0:
+				if(Smoke||NoAdd)Return Texman.CheckForTexture("NSHSF0");
+				Return Texman.CheckForTexture("NSHSB0");
+			Case 1:Return Texman.CheckForTexture("NSHSG0");
+			Case 2:Return Texman.CheckForTexture("NSHSE0");
+		}
+		
+		Return Texman.CheckForTexture("glpart");
+	}
+}
+
+enum MRIntWeaps_PlrParticlesFlags{
+	MRIWPP_Puff = 8388608,//23
+	MRIWPP_PuffLiquid = 67108864,//26
+	
+	MRIWPP_PlasmaFly = 1,//0
+	MRIWPP_PlasmaTrail = 4096,//12
+	MRIWPP_PlasmaLightning = 2,//1
+	MRIWPP_PlasmaRaisingSparks = 4,//2
+	MRIWPP_PlasmaDroppingSparks = 8,//3
+	MRIWPP_PlasmaSmoke = 16,//4
+	
+	MRIWPP_RocketFlare = 32,//5
+	MRIWPP_RocketSmoke = 64,//6
+	MRIWPP_RocketTrail = 8192,//13
+	MRIWPP_RocketSparks = 16384,//14
+	MRIWPP_RocketImpactSmoke = 128,//7
+	MRIWPP_RocketImpactSparks = 256,//8
+	
+	MRIWPP_BFGOrbital = 512,//9
+	MRIWPP_BFGFly = 1024,//10
+	MRIWPP_BFGTrail = 2048,//11
+	MRIWPP_BFGHitSteam = 32768,//15
+	MRIWPP_BFGHitTrace = 65536,//16
+	MRIWPP_BFGOnlyHitTrace = 262144,//XD //18
+	MRIWPP_BFGHitBallTrace = 131072,//17
+	MRIWPP_BFGHitRaisingSparks = 4194304,//22
+	MRIWPP_BFGImpactLightning = 524288,//19
+	MRIWPP_BFGImpactSteam = 1048576,//20
+	MRIWPP_BFGImpactSparks = 2097152,//21
+
+	MRIWPP_InciFire = 16777216,//24
+	MRIWPP_InciSmoke = 33554432,//25
+	
+	MRIWPP_CalaTrail = 134217728,//27
+}
+
+Class MRIntWeaps_PlayerProjectileParticles: MRIntWeaps_ActorEffects
+{
+	int Type;
+	int DeathTick, Setting;
+	Bool Monster, AltLightnings;
+	Float PAmnt;
+	
+	Override Void PostBeginPlay()
+	{
+		if(Monster){
+			if(!MRIntW_MonsterParticles){Destroy();Return;}
+			Setting = MRIntW_MonsterWhichParticles;
+		}
+		else {
+			if(!MRIntW_PlayerParticles){Destroy();Return;}
+			Setting = MRIntW_PlayerWhichParticles;
+		}
+		
+		Switch(Type){
+			Case 0://Rocket
+				if(Monster &&
+					!(Setting&MRIWMP_CyberRocketFlare||
+					Setting&MRIWMP_CyberRocketSmoke||
+					Setting&MRIWMP_CyberRocketTrail||
+					Setting&MRIWMP_CyberRocketSparks||
+					Setting&MRIWMP_CyberRocketImpactSmoke||
+					Setting&MRIWMP_CyberRocketImpactSparks)
+				){Destroy();Return;}
+				if(!(Setting&MRIWPP_RocketFlare||
+					Setting&MRIWPP_RocketSmoke||
+					Setting&MRIWPP_RocketTrail||
+					Setting&MRIWPP_RocketSparks||
+					Setting&MRIWPP_RocketImpactSmoke||
+					Setting&MRIWPP_RocketImpactSparks)
+				){Destroy();Return;}
+			Case 1://Plasma
+				if(!(Setting&MRIWPP_PlasmaFly||
+					Setting&MRIWPP_PlasmaTrail||
+					Setting&MRIWPP_PlasmaLightning||
+					Setting&MRIWPP_PlasmaRaisingSparks||
+					Setting&MRIWPP_PlasmaDroppingSparks||
+					Setting&MRIWPP_PlasmaSmoke)
+				){Destroy();Return;}
+			Case 2://BFG
+				if(!(Setting&MRIWPP_BFGOrbital||
+					Setting&MRIWPP_BFGFly||
+					Setting&MRIWPP_BFGTrail||
+					Setting&MRIWPP_BFGHitSteam||
+					Setting&MRIWPP_BFGHitTrace||
+					Setting&MRIWPP_BFGOnlyHitTrace||
+					Setting&MRIWPP_BFGHitBallTrace||
+					Setting&MRIWPP_BFGHitRaisingSparks||
+					Setting&MRIWPP_BFGImpactLightning||
+					Setting&MRIWPP_BFGImpactSteam||
+					Setting&MRIWPP_BFGImpactSparks)
+				){Destroy();Return;}
+			Case 3://Incinirator
+				if(!(Setting&MRIWPP_InciFire||
+					Setting&MRIWPP_InciSmoke)
+				){Destroy();Return;}
+			Case 4://Calamity Blade
+				if(!Setting&MRIWPP_CalaTrail){Destroy();Return;}
+		}
+		
+		PAmnt = MRIntW_PlayerParticlesAmount;
+		AltLightnings = MRIntW_AltLightnings;
+		ParTex = SetTexture();
+		SmkTex = SetTexture(true);
+		
+		if(Type==2 && Setting&MRIWPP_BFGOrbital){
+			For(int i=0;i<5*PAmnt;i++){
+				Let a = MRIntWeaps_BFGParticle(Level.SpawnVisualThinker('MRIntWeaps_BFGParticle'));
+				a.Master = Master;
+				a.Angle = CRandom(0, 36)*10;
+				a.Pitch = CRandom(0, 36)*10;
+				a.Radius = CFRandom(28, 32);
+				a.AngChange = CFRandom(.5, 1.5);
+				a.PitChange = CRandom(9, 20);
+				a.StartScale = CFRandom(2, 4);
+			}
+		}
+	}
+	
+	Override Void Tick()
+	{
+		if(Level && Level.isFrozen())Return;
+		Super.Tick();
+
+		if(!Master){Destroy();Return;}
+		
+		if(Monster)PAmnt = MRIntW_MonsterParticlesAmount;
+		else PAmnt = MRIntW_PlayerParticlesAmount;
+		
+		if(Master.Vel.Length()<=0)MasterDeath();
+		else MasterTick();
+	}
+	
+	Void MasterDeath()
+	{
+		DeathTick++;
+		
+		if(PAmnt<=0)Return;
+		
+		if(!MRGPartsCheckDraw() && Master.Target != Players[ConsolePlayer].mo)Return;
+		Bool Enemy = Master.Master;
+		if(Master.Master == Players[ConsolePlayer].Camera)AltLightnings = false;
+		
+		Switch(Type)
+		{
+			Case 0://Rocket
+				if(DeathTick<2 && MRIntW_ScreenShake>1){
+					Double Intens = MRIntW_ScreenShakeAmount*2;
+					Master.A_QuakeEx(Intens, Intens, Intens, 13, 0, 200, "", QF_SCALEDOWN, RollIntensity: Intens*.5);
+				}
+				if(Setting&MRIWPP_RocketImpactSmoke && DeathTick<7*PAmnt){
+					Double Ang = CRandom(-30,30);
+					MRSpawnParticle(Color(30,30,30), SmkTex, SPF_ROLL, STYLE_None, CRandom(20, 30), CRandom(32, 35), Master.Pos, (Actor.AngleToVector(FaceCam(Master)+Ang*2, 3), CFRandom(-.5, 2)), Alpha: CFRandom(.6, .7), SizeStep: CFRandom(4.4, 5), Roll:CRandom(0, 360), RollVel:-Ang*.1);
+				}
+				if(Setting&MRIWPP_RocketImpactSparks && DeathTick<7 && DeathTick%2==0){
+					int Amount = 40*PAmnt;
+					Vector3 Pos = Master.Pos;
+					Double Dist = 1;
+					if(Players[ConsolePlayer].Camera)Dist = Max(1, 1+(Master.Distance3D(Players[ConsolePlayer].Camera)-80)*.0016);
+					For(int i=CRandom(0, 10)*PAmnt;i<Amount;i++){
+						Double Pow = CFRandom(1, 4);
+						
+						Vector3 Vel = (Actor.AngleToVector(CRandom(0, 360), Pow), -Sin(-CRandom(-20, 40))*Pow*2)*Dist;
+						
+						int Col = 25*CRandom(4, 10);
+						
+						Float Size = CFRandom(1, 3)*Dist;
+						int Age = 40-Pow;
+						MRSpawnParticle(Color(255,Col,int(Col*.5)), ParTex, SPF_FULLBRIGHT, STYLE_Add, Age, Size, Pos, Vel, (0,0,-CFRandom(.005, .7)*Dist), 1, 0, -(Size/Age));
+					}
+					
+					if(DeathTick==2){
+						int G = CRandom(30, 70);
+						MRSpawnParticle(Color(255,G,CRandom(10, G*.5)), ParTex, SPF_REPLACE|SPF_FULLBRIGHT, STYLE_Add, 8, 20, Master.Pos + (0,0,5), SizeStep: CRandom(25, 30));
+					}
+				}
+				Return;
+			Case 1://Plasma
+				if(Setting&MRIWPP_PlasmaDroppingSparks && ((Enemy && DeathTick%3==0)||(!Enemy && DeathTick<2))){
+					int Times = 1;
+					if(!Enemy)Times = 6*PAmnt;
+					Vector3 Pos = Master.Pos + (0,0,-4);
+					For(int i=0;i<Times;i++){
+						if(Enemy)Pos = Master.Master.Pos + (Actor.AngleToVector(FaceCam(Master.Master)+90, Master.Master.Radius*CFRandom(-.5, .5)), GetDefaultByType(Master.Master.GetClass()).Height*CFRandom(.1, .8));
+						Vector3 Vel = (Actor.AngleToVector(CRandom(0, 360), 2), CRandom(2, 4));
+						if(!Enemy){
+							Double Pow = CFRandom(7, 12);
+							Vector3 Vel = (Actor.AngleToVector(CRandom(0, 360), Pow), -Sin(-CRandom(-20, 40))*Pow*2);
+						}
+						int Col = 25*CRandom(5, 10);
+						
+						Float Size = CFRandom(1.5, 3.5);
+						if(Enemy){
+							Size = Max(1, GetDefaultByType(Master.Master.GetClass()).Radius*.1);
+							Vel.XY *= Size;
+						}
+						int Age = CRandom(13, 19);
+						MRSpawnParticle(Color(Col,Col,255), ParTex, SPF_FULLBRIGHT, STYLE_Add, Age, Size, Pos, Vel, (0,0,-CFRandom(.2, .6)), Fade:0, SizeStep:-(Size/Age));
+					}
+				}
+				
+				if(Setting&MRIWPP_PlasmaRaisingSparks && DeathTick%2!=0){
+					int Amount = Max(1, 2*PAmnt);
+					For(int i=0;i<Amount;i++){
+						Vector3 Pos = Master.Pos + (CRandom(-5, 5), CRandom(-5, 5), CRandom(-5, 0));
+						if(Enemy)Pos = Master.Master.Pos + (Actor.AngleToVector(FaceCam(Master.Master)+90, Master.Master.Radius*CFRandom(-.8, .8)), GetDefaultByType(Master.Master.GetClass()).Height*CFRandom(.1, .8));
+						
+						int Col = 25*CRandom(5, 10);
+						
+						MRSpawnParticle(Color(Col,Col,255), ParTex, SPF_FULLBRIGHT, STYLE_Add, CRandom(17, 24), CFRandom(3.5, 4.5), Pos, Accel:(0,0,.05));
+					}
+				}
+				if(Setting&MRIWPP_PlasmaLightning && DeathTick%2==0){
+					Vector3 Pos = Master.Pos + (CRandom(-2 ,2), CRandom(-2, 2), CRandom(-3, 3));
+					Float Alpha = 1;
+					if(Enemy){
+						Double Height = DeathTick;
+						Height /= 19;
+						Height = 1-Height;
+						Pos = Master.Master.Pos + (Actor.AngleToVector(FaceCam(Master.Master)+90, Master.Master.Radius*CFRandom(-.5, .5)), GetDefaultByType(Master.Master.GetClass()).Height*Height);
+						Alpha = CFRandom(.3, .7);
+					}
+					Double Ang = CFRandom(0, 359);
+					Double Pit = CFRandom(-90, 90);
+					Double Size = 3./Clamp(PAmnt, 1, 1.4);
+					
+					
+					int Leng = 20*Clamp(PAmnt, .5, 1.5);
+					
+					Float Step = Max(.25, 1/PAmnt);
+					if(PAmnt<1)Step = 1/((PAmnt-1)*.1+1);
+					
+					Float StepL = Min(2, PAmnt);
+					if(PAmnt<1)StepL = (PAmnt-1)*.25+1;
+					
+					Int Life = (8+DeathTick)*Min(1, (PAmnt-1)*.5+1);
+					
+					For(double i=0;i<Leng;i+=Step){
+						int Col = 25*CRandom(5, 10);
+						Vector3 PPos = (Cos(Ang), Sin(Ang), Sin(Pit))/StepL;
+						Pos = Pos+PPos;
+						
+						if(AltLightnings)MRSpawnParticle(Color(Col,Col,255), ParTex, SPF_FULLBRIGHT|SPF_NEGATIVE_FADESTEP, STYLE_Add, Life*CFRandom(1, 1.2), Size, Pos, Alpha: 0, Fade: -(i/Leng), SizeStep:-(Size/Life));
+						else MRSpawnParticle(Color(Col,Col,255), ParTex, SPF_FULLBRIGHT, STYLE_Add, Life*CFRandom(1, 1.2), Size, Pos, Alpha:Alpha);
+						
+						Ang += CRandom(-2, 2)*(20+DeathTick);
+						Pit += CRandom(-2, 2)*(10+DeathTick);
+					}
+				}
+				if(Setting&MRIWPP_PlasmaSmoke && DeathTick==10){
+					if(Enemy)MRSpawnParticle(Color(255,255,255), SmkTex, SPF_FULLBRIGHT, STYLE_None, CRandom(16, 22), GetDefaultByType(Master.Master.GetClass()).Radius, Master.Master.Pos+(Actor.AngleToVector(FaceCam(Master.Master), GetDefaultByType(Master.Master.GetClass()).Radius*CFRandom(-1, 1)),Master.Master.Height*CFRandom(.2, .7)), (Actor.AngleToVector(FaceCam(Master.Master), .5), 1.5), Alpha: CFRandom(.25, .3), SizeStep: CFRandom(.19, .21)*GetDefaultByType(Master.Master.GetClass()).Radius);
+					else MRSpawnParticle(Color(255,255,255), SmkTex, SPF_FULLBRIGHT, STYLE_None, CRandom(16, 22), CRandom(27, 32), Master.Pos, (Actor.AngleToVector(FaceCam(Master)+CRandom(-90, 90), .5), CFRandom(.2, .6)), Alpha: CFRandom(.4, .55), SizeStep: CFRandom(1.6, 2));
+				}
+				Return;
+			Case 2://BFG
+				if(Setting&MRIWPP_BFGImpactLightning && ((Enemy && DeathTick%2==0) || DeathTick<21)){
+					Vector3 Pos = (CRandom(-1, 1)*DeathTick*1.5, CRandom(-1, 1)*DeathTick*1.5, CFRandom(-1.5, 1.5)*DeathTick*1.5);
+					Float Alpha = 1;
+					if(Enemy){
+						Double Height = DeathTick;
+						Height /= (Master.Master.Health>0?100:50);
+						if(Master.Master.Health>0)Height = CFRandom(.1, .8);//(DeathTick%2==0)?.5-Height:.5+Height;
+						else Height = 1-Height;
+						Pos = (Actor.AngleToVector(FaceCam(Master.Master)+90, Master.Master.Radius*CFRandom(-.5, .5)), GetDefaultByType(Master.Master.GetClass()).Height*Height);
+						Alpha = CFRandom(.3, .8);
+					}
+					
+					int Leng = 30*Clamp(PAmnt, .5, 1.5);
+					if(Enemy)Leng = ((GetDefaultByType(Master.Master.GetClass()).Radius+GetDefaultByType(Master.Master.GetClass()).Height)*.5)*Clamp(PAmnt, .5, 1.5);
+					Double Ang = VectorAngle(Pos.X, Pos.Y);
+					Double Pit = VectorAngle(Pos.Z, Pos.XY.Length());
+					Double Size = 3./Clamp(PAmnt, 1, 2);
+					
+					if(Enemy){
+						Ang = CRandom(0, 359);
+						Pit = CRandom(-90, 90);
+						Pos += Master.Master.Pos + Master.Master.Vel;
+						Size = 2./Clamp(PAmnt, 1, 1.4);
+					}
+					else Pos += Master.Pos;
+					
+					
+					Float Step = Max(.25, 1/PAmnt);
+					if(PAmnt<1)Step = 1/((PAmnt-1)*.1+1);
+					
+					Float StepL = Min(2, PAmnt);
+					if(PAmnt<1)StepL = (PAmnt-1)*.25+1;
+					
+					Int Life = (8+DeathTick)*Min(1, (PAmnt-1)*.5+1);
+					
+					For(double i=0;i<Leng;i+=Step){
+						int Col = 25*CRandom(1, 5)*2-i*.5;
+						
+						Vector3 PPos = (Cos(Ang), Sin(Ang), Sin(Pit))*.8/StepL;
+						if(!Enemy)PPos = (Cos(Ang), Sin(Ang), Sin(Pit))*1.1/StepL;
+						Pos = Pos+PPos;
+						
+						if(AltLightnings)MRSpawnParticle(Color(255,255,Col), ParTex, SPF_FULLBRIGHT|SPF_NEGATIVE_FADESTEP, STYLE_Add, Life*CFRandom(1, 1.2), Size, Pos, Alpha: 0, Fade: -(i/Leng), SizeStep:-(Size/Life));
+						else MRSpawnParticle(Color(255,255,Col), ParTex, SPF_FULLBRIGHT, STYLE_Add, Life*CFRandom(1, 1.2), Size, Pos, Alpha:Alpha);
+						
+						Ang += CRandom(-4, 4)*(Enemy?10+DeathTick*.25:30-DeathTick);
+						Pit += CRandom(-4, 4)*(Enemy?10+DeathTick*.25:30-DeathTick);
+					}
+				}
+				
+				if(Enemy && Setting&MRIWPP_BFGImpactSteam){
+					if((DeathTick>10 && Master.Master.Health>0) || DeathTick>30)Return;
+					Float Height;
+					if(Master.Master.Health>0)Height = Master.Master.Height*CFRandom(.2, .7);
+					else Height = DeathTick;
+					MRSpawnParticle(Color(255,255,255), SmkTex, SPF_FULLBRIGHT, STYLE_None, CRandom(16, 22), GetDefaultByType(Master.Master.GetClass()).Radius, Master.Master.Pos+(Actor.AngleToVector(FaceCam(Master.Master), GetDefaultByType(Master.Master.GetClass()).Radius*CFRandom(-1.1, 1.1)), Height), (Actor.AngleToVector(FaceCam(Master.Master), .5), 1.5), Alpha: CFRandom(.2, .25), SizeStep: CFRandom(.19, .21)*GetDefaultByType(Master.Master.GetClass()).Radius);
+				}
+				
+				if(Setting&MRIWPP_BFGImpactSparks && DeathTick<10){
+					int Times = (40-(DeathTick-4)*6)*PAmnt;
+					For(int i=0;i<Times;i++){
+						Double Pow = 6.4-(DeathTick-4);
+						Pow += CFRandom(-.25, .25);
+						
+						Double Ang = CRandom(0, 259);
+						Double Pit = CRandom(-90, 90);
+						
+						Vector3 Dir = (Actor.AngleToVector(Ang, 1)*Cos(Pit), Sin(Pit));
+						
+						int Col = 25*CFRandom(3, 7);
+						
+						Double Size = CFRandom(8, 10)-DeathTick*.8;
+						MRSpawnParticle(Color(Col,255,Col), ParTex, SPF_FULLBRIGHT, STYLE_Add, (DeathTick-2)*6, Size, Master.Pos+(0,0,5)+Dir*CFRandom(0, 3), Dir*Pow);
+					}
+				}
+				Return;
+			Case 3://Incinirator
+				if(Setting&MRIWPP_InciSmoke && DeathTick%3==0 && DeathTick<19){
+					Vector3 Pos = Master.Pos + (CFRandom(-15, 15), CFRandom(-15, 15), DeathTick*.5);
+					if(Enemy)Pos = Master.Master.Pos + (CFRandom(-.8, .8)*GetDefaultByType(Master.Master.GetClass()).Radius, CFRandom(-.8, .8)*GetDefaultByType(Master.Master.GetClass()).Radius, CFRandom(0, .5)*Master.Master.Height);
+					int Col = CRandom(30, 50);
+					MRSpawnParticle(Color(Col,Col,int(Col*CFRandom(.8, 1))), SmkTex, SPF_FULLBRIGHT, STYLE_None, CRandom(17, 21), CRandom(44, 46), Pos, (Actor.AngleToVector(CRandom(0, 360), CFRandom(.4, 1.4)), 3), SizeStep:CFRandom(2.7, 4));
+				}
+				if(Setting&MRIWPP_InciFire){
+					Float Amnt = (5-DeathTick*.11)*PAmnt;
+					For(double i=0;i<Amnt;i++){
+						Float Size = CFRandom(6, 12)/((PAmnt-1)*.5+1);
+						
+						Vector3 Ofst = (CFRandom(-25+Deathtick*.25, 25-DeathTick*.25),CFRandom(-25+DeathTick*.25, 25-DeathTick*.25),CFRandom(-10, 10)+DeathTick*.5);
+						
+						Vector3 Pos = Master.Pos + Ofst;
+						
+						if(Enemy){
+							Float Height = DeathTick;
+							Height = Height/50*Master.Master.Height;
+							Ofst = (CFRandom(-.8, .8)*GetDefaultByType(Master.Master.GetClass()).Radius, CFRandom(-.8, .8)*GetDefaultByType(Master.Master.GetClass()).Radius, CFRandom(0, 20)+Height);
+							Pos = Master.Master.Pos + Ofst;
+						}
+						
+						int Col[3];
+						Col[0] = 255;
+						Col[1] = CRandom(100, 200);
+						Col[2] = Col[1]*.5;
+						MRSpawnParticle(Color(Col[0],Col[1],Col[2]), ParTex, SPF_FULLBRIGHT, STYLE_Add, 7*((PAmnt-1)*.5+1), Size, Pos, (-Ofst.XY*CFRandom(-.01, .05), CFRandom(.4, 1.4)), Alpha: CFRandom(.5, 1), SizeStep:1);
+					}
+					
+					if(DeathTick%4!=0 || DeathTick>20)Return;
+					
+					Float Size = CFRandom(.5, 2)/((PAmnt-1)*.5+1);
+					
+					Vector3 Ofst = (CFRandom(-25+Deathtick*.25, 25-DeathTick*.25),CFRandom(-25+DeathTick*.25, 25-DeathTick*.25),CFRandom(-10, 10)+DeathTick*.5);
+					
+					Vector3 Pos = Master.Pos + Ofst;
+					
+					if(Enemy){
+						Float Height = DeathTick;
+						Height = Height/50*Master.Master.Height;
+						Ofst = (CFRandom(-.8, .8)*GetDefaultByType(Master.Master.GetClass()).Radius, CFRandom(-.8, .8)*GetDefaultByType(Master.Master.GetClass()).Radius, CFRandom(0, 20)+Height);
+						Pos = Master.Master.Pos + Ofst;
+					}
+					
+					int Col[3];
+					Col[0] = 255;
+					Col[1] = CRandom(100, 200);
+					Col[2] = Col[1]*.5;
+					MRSpawnParticle(Color(Col[0],Col[1],Col[2]), ParTex, SPF_FULLBRIGHT, STYLE_Add, 20*((PAmnt-1)*.5+1), Size, Pos, (-Ofst.XY*CFRandom(-.01, .05), CFRandom(1.2, 2)), Alpha: CFRandom(.5, 1), SizeStep:.25);
+				}
+				Return;
+			Case 4://Calamity Blade
+				if(DeathTick<6)For(int i=CRandom(0, 2);i<5;i++){
+					MRSpawnParticle(Color(255,70,30), ParTex, SPF_FULLBRIGHT, STYLE_Add, 30, CFRandom(3, 6), Master.Pos + (CFRandom(-1, 1)*Master.Radius, CFRandom(-1, 1)*Master.Radius, CFRandom(-1, 1)*Master.Height), (CFRandom(-.25, .25), CFRandom(-.25, .25), CFRandom(-2, 2)), (CFRandom(-.01, .01), CFRandom(-.01, .01), 0));
+				}
+				Return;
+		}
+	}
+	
+	Void MasterTick(){
+		if(PAmnt<=0)Return;
+		
+		if(!MRGPartsCheckDraw() && Master.Target != Players[ConsolePlayer].mo)Return;
+		
+		Switch(Type)
+		{
+			Case 0://Rocket
+				Vector3 Diff = Master.Pos-Master.Prev;
+				
+				if(Setting&MRIWPP_RocketSmoke)For(double i=12;i<=Diff.Length()+12;i+=6){
+					MRSpawnParticle(Color(30,30,30), SmkTex, 0, STYLE_None, 10, CRandom(25, 28), Master.Prev+(0,0,5)-Diff.Unit()*i, Accel:-Master.Vel*.01*Max(0, CRandom(-15, 10))+(0,0,.1), Alpha: .9, SizeStep:-.5);
+				}
+				if(Setting&MRIWPP_RocketFlare)MRSpawnParticle(Color(190,40,0), ParTex, SPF_FULLBRIGHT, STYLE_None, 2, CRandom(24, 35), Master.Prev+(0,0,5)-Diff.Unit()*9, Master.Vel, Alpha: .7);
+				
+				if(Setting&MRIWPP_RocketTrail){
+					int Col = 25*CRandom(1, 6);
+					
+					For(float i=0;i<1;i+=.25)
+						MRSpawnParticle(Color(255,Col,int(Col*.5)), ParTex, SPF_FULLBRIGHT, STYLE_Add, 5, 25, Master.Prev-Master.Vel*i+(0,0,5), Alpha: .6, SizeStep:-5);
+				}
+				if(Setting&MRIWPP_RocketSparks && Master.GetAge()%2==0){
+					Double Ang = VectorAngle(Master.Vel.X, Master.Vel.Y);
+					Double Pit = VectorAngle(Master.Vel.XY.Length(), Master.Vel.Z);
+					Double Pow = CRandom(1, 2);
+					Double RandPit = CRandom(-70, 70);
+					Vector3 Vel = (Actor.AngleToVector(Ang+90*CRandomPick(-1, 1), Pow), Pow*Sin(RandPit)*Cos(Pit));
+					Vel.XY += Actor.AngleToVector(Ang+RandPit*4, Pow)*Sin(Pit);
+					
+					int Col = 25*CRandom(4, 8);
+					
+					MRSpawnParticle(Color(255,Col,int(Col*.5)), ParTex, SPF_FULLBRIGHT, STYLE_Add, CRandom(6, 10), CFRandom(2, 3), Master.Prev + (0,0,5), Vel+Master.Vel*.5, (CFRandom(-.1,.1),CFRandom(-.1,.1),-.2));
+				}
+				Return;
+			Case 1://Plasma
+				if(Setting&MRIWPP_PlasmaTrail){
+					int Col = 25*CRandom(1, 6);
+					
+					For(float i=0;i<2;i+=.25)
+						MRSpawnParticle(Color(Col,Col,255), ParTex, SPF_FULLBRIGHT, STYLE_Add, 3, 24-i*8, Master.Prev-Master.Vel*i+(0,0,2), Master.Vel, Alpha: .4, SizeStep:-8);
+				}
+				if(Setting&MRIWPP_PlasmaFly){
+				
+					Double Ang = VectorAngle(Master.Vel.X, Master.Vel.Y);
+					Double Pit = VectorAngle(Master.Vel.XY.Length(), Master.Vel.Z);
+					Vector3 Pos = Master.Prev + (Actor.AngleToVector(Ang+90, CRandom(-4, 4)), CRandom(-3, 3));
+					Double Pow = CRandom(2, 3);
+					Double RandPit = CRandom(-70, 70);
+					Vector3 Vel = (Actor.AngleToVector(Ang+90*CRandomPick(-1, 1), Pow), Pow*Sin(RandPit)*Cos(Pit));
+					Vel.XY += Actor.AngleToVector(Ang+RandPit*4, Pow)*Sin(Pit);
+					
+					int Col = 25*CRandom(2, 10);
+					
+					MRSpawnParticle(Color(Col,Col,255), ParTex, SPF_FULLBRIGHT, STYLE_Add, CRandom(6, 10), CFRandom(3, 5), Pos, Vel+Master.Vel, (CFRandom(-.1,.1),CFRandom(-.1,.1),-.2));
+				}
+				Return;
+			Case 2://BFG
+				if(Setting&MRIWPP_BFGFly){
+				
+					Double Ang = VectorAngle(Master.Vel.X, Master.Vel.Y);
+					Double Pit = VectorAngle(Master.Vel.XY.Length(), Master.Vel.Z);
+					Vector3 Pos = Master.Prev + (Actor.AngleToVector(Ang+90, CRandom(-8, 8)), CRandom(10, 20));
+					Double Pow = CRandom(3, 4);
+					Double RandPit = CRandom(-70, 70);
+					Vector3 Vel = (Actor.AngleToVector(Ang+90*CRandomPick(-1, 1), Pow), Pow*Sin(RandPit)*Cos(Pit));
+					Vel.XY += Actor.AngleToVector(Ang+RandPit*4, Pow)*Sin(Pit);
+					
+					int Col = 25*CRandom(2, 10);
+					
+					MRSpawnParticle(Color(Col,255,Col), ParTex, SPF_FULLBRIGHT, STYLE_Add, CRandom(9, 12), CFRandom(3, 5), Pos, Vel+Master.Vel, (CFRandom(-.1,.1),CFRandom(-.1,.1),-.2));
+				}
+				if(Setting&MRIWPP_BFGTrail){
+					int Col = 25*CRandom(1, 4);
+					
+					MRSpawnParticle(Color(Col,255,Col), ParTex, SPF_FULLBRIGHT, STYLE_Add, 10, 90, Master.Prev+(0,0,15), Alpha: .7, SizeStep:-8);
+				}
+				Return;
+			Case 3://Incinirator
+				if(Setting&MRIWPP_InciFire && Master.GetAge()>0){
+					Vector3 Diff = Master.Pos-Master.Prev;
+					if(Master.GetAge()<2 && Master.Target){
+						Vector3 ShotP = (Master.Target.Pos.XY, Master.Target.Player.ViewZ);
+						ShotP.XY += Actor.AngleToVector(Master.Target.Angle, 50)*Cos(Master.Target.Pitch);
+						ShotP.Z -= Sin(Master.Target.Pitch)*50;
+						
+						ShotP.Z -= Cos(Master.Target.Pitch)*13;
+						ShotP.XY -= Actor.AngleToVector(Master.Target.Angle, 13)*Sin(Master.Target.Pitch);
+						
+						Diff = Master.Pos - ShotP;
+					}
+					Float Age = Min(4, Master.GetAge());
+					
+					Vector3 ThrwVel = (0,0,0);
+					if(Master.Target && Master.GetAge()<2)ThrwVel = Master.Target.Vel * (1-Age/4);
+					
+					For(double i=0;i<Diff.Length();i+=3/PAmnt){
+						Float Size = CFRandom(3, 6)/((PAmnt-1)*.5+1);
+						Float Dist = CFRandom(0, 5*Max(i/Diff.Length()*2, Age));
+						Float Ang = CRandom(0, 360);
+						Float Pit = CRandom(-90, 90);
+						Vector3 RPos = (Actor.AngleToVector(Ang, Dist)*Cos(Pit), Sin(Pit)*(Dist-2*Max(2, Age)));
+						int Col[3];
+						Col[0] = 255;
+						Col[1] = CRandom(100, 200);
+						Col[2] = Col[1]*.5;
+						MRSpawnParticle(Color(Col[0],Col[1],Col[2]), ParTex, SPF_FULLBRIGHT, STYLE_Add, 6, Size, Master.Pos-Diff.Unit()*i + RPos + ThrwVel*(i/Diff.Length()), (CFRandom(-.1, .1), CFRandom(-.1, .1), CFRandom(0, .25))*Age + ThrwVel*(i/Diff.Length())*.5, SizeStep:1);
+					}
+				}
+				Return;
+			Case 4://Calamity Blade
+				For(int i=CRandom(0, 3);i<10;i++){
+					MRSpawnParticle(Color(255,70,30), ParTex, SPF_FULLBRIGHT, STYLE_Add, 10, CFRandom(3, 6), Master.Pos + (CFRandom(-1, 1)*Master.Radius, CFRandom(-1, 1)*Master.Radius, CFRandom(-1, 1)*Master.Height));
+				}
+				Return;
+		}
+	}
+}
+
+Class MRIntWeaps_BFGParticle: VisualThinker//Particles spinning around BFG ball
+{
+	Actor Master;
+	Double Angle, Pitch, AngChange, PitChange, Radius;
+	Bool FlyAway;
+	
+	Double StartScale;
+		
+	Override Void PostBeginPlay()
+	{
+		Flags = SPF_FULLBRIGHT;
+		int CR = CRandom(110, 130);
+		int CB = CR-CRandom(5, 20);
+		SColor = Color(CR,255,CB);
+		SetRenderStyle(STYLE_Add);
+		Alpha = .7;
+		Texture = MRIntWeaps_ActorEffects.SetTexture(VThink:true);
+		Vector2 Size = Texman.GetScaledSize(Texture);
+		Scale = (StartScale/Size.X, StartScale/Size.Y);
+		Vector2 BaseOffset = -Size*.5;
+		Offset = BaseOffset*Scale.X;
+		Super.PostBeginPlay();
+	}
+	
+	Override Void Tick()
+	{
+		Super.Tick();
+
+		if(Scale.X<=0||Alpha<=0){
+			Destroy();
+			Return;
+		}
+		
+		if(!Master||Master.Vel.Length()<=0){
+			if(!FlyAway){
+				FlyAway = True;
+				Vel = (Actor.AngleToVector(Angle, Cos(Pitch)*StartScale), Sin(Pitch)*StartScale);
+				Return;
+			}
+			
+			Scale-=(.005, .005);
+			Return;
+		}
+		
+		Vector3 PrevPos = (Actor.AngleToVector(Angle, Cos(Pitch)*Radius), Sin(Pitch)*Radius);
+		
+		Pitch+=PitChange;
+		if(Pitch>=360)Pitch = Pitch%360;
+		
+		Angle+=AngChange;
+		if(Angle>=360)Angle = Angle%360;
+		
+		Vector3 NextPos = (Actor.AngleToVector(Angle, Cos(Pitch)*Radius), Sin(Pitch)*Radius);
+		
+		Pos = Master.Pos+(0,0,12)+PrevPos;
+		Vel = Master.Vel + NextPos-(PrevPos);
+		
+		//Scale = (.02,.02)*StartScale*CFRandom(.5, 1.6);
+	}
+}
+
+Extend Class MRIntWeaps_BFGBall
+{
+	Override Void PostBeginPlay()
+	{
+		Super.PostBeginPlay();
+		
+		ParTex = MRIntWeaps_ActorEffects.SetTexture();
+		SmkTex = MRIntWeaps_ActorEffects.SetTexture(true);
+	}
+	
+	TextureId ParTex, SmkTex;
+	
+	Void A_MRBFGSpray(class<Actor> spraytype = "BFGExtra", int numrays = 40, int damagecnt = 15, double ang = 90, double distance = 16*64, double vrange = 32, int defdamage = 0, int flags = 0, Bool Pre = false)
+	{
+		int Setting = MRIntW_PlayerWhichParticles;
+		int damage;
+		FTranslatedLineTarget t;
+
+		if(!target) return;
+
+		// [XA] Set the originator of the rays to the projectile (self) if
+		//      the new flag is set, else set it to the player (target)
+		Actor originator = target;
+		if(flags&BFGF_MISSILEORIGIN)originator = self;
+		
+		Array<Actor> Hit;
+		
+		// offset angles from its attack ang
+		for (int i = 0; i < numrays; i++)
+		{
+			double an = angle - ang / 2 + ang / numrays*i;
+
+			Double Pit4 = originator.AimLineAttack(an, distance, t, vrange);
+			
+			if(Pre){
+				if(Setting&MRIWPP_BFGHitTrace){
+					Vector3 Dir = (AngleToVector(an, 1)*Cos(Pit4), -Sin(Pit4));
+					For(float i=.025;i<1;i*=1.5){
+						MRSpawnParticle(Color(100,255,100), ParTex, SPF_FULLBRIGHT|SPF_REPLACE, STYLE_Add, 9, 1, (originator.Pos.XY, originator.Player.ViewZ-4)+Dir*i*distance, Alpha: .6);
+					}
+				}
+				if((Setting&MRIWPP_BFGOnlyHitTrace || Setting&MRIWPP_BFGHitBallTrace) && t.linetarget){
+					if(Hit.Find(t.LineTarget)!=Hit.Size())Hit.Insert(Hit.Find(t.LineTarget), t.LineTarget);
+					else Hit.Push(t.LineTarget);
+				}
+			}
+			
+			if(Pre)Continue;
+			
+			if(t.linetarget)
+			{
+				Actor spray = Spawn(spraytype, t.linetarget.pos + (0, 0, t.linetarget.Height / 4), ALLOW_REPLACE);
+
+				int dmgFlags = 0;
+				Name dmgType = 'BFGSplash';
+
+				if (spray != null)
+				{
+					if ((spray.bMThruSpecies && target.GetSpecies() == t.linetarget.GetSpecies()) || 
+						(!(flags & BFGF_HURTSOURCE) && target == t.linetarget)) // [XA] Don't hit oneself unless we say so.
+					{
+						spray.Destroy(); // [MC] Remove it because technically, the spray isn't trying to "hit" them.
+						continue;
+					}
+					if (spray.bPuffGetsOwner) spray.target = target;
+					if (spray.bFoilInvul) dmgFlags |= DMG_FOILINVUL;
+					if (spray.bFoilBuddha) dmgFlags |= DMG_FOILBUDDHA;
+					dmgType = spray.DamageType;
+				}
+
+				if (defdamage == 0)
+				{
+					damage = 0;
+					for (int j = 0; j < damagecnt; ++j)
+						damage += Random[BFGSpray](1, 8);
+				}
+
+				int newdam = t.linetarget.DamageMobj(originator, target, damage, dmgType, dmgFlags|DMG_USEANGLE, t.angleFromSource);
+				t.TraceBleed(newdam > 0 ? newdam : damage, self);
+				
+				if(Setting&MRIWPP_BFGHitSteam){
+					MRSpawnParticle(Color(255,255,255), SmkTex, SPF_FULLBRIGHT, STYLE_None, 25, GetDefaultByType(t.linetarget.GetClass()).Radius, t.linetarget.Pos+(AngleToVector(FaceCam(t.linetarget), GetDefaultByType(t.linetarget.GetClass()).Radius*CFRandom(-.8, .8)),t.linetarget.Height*CFRandom(.1, .9)), (AngleToVector(FaceCam(t.linetarget), .5), 1), Alpha: CFRandom(.55, .6), SizeStep: CFRandom(1.3, 1.6));
+				}
+				if(Setting&MRIWPP_BFGHitRaisingSparks){
+					For(int i=0;i<4;i++){
+						Vector3 Pos = t.linetarget.Pos + (GetDefaultByType(t.linetarget.GetClass()).Radius*CFRandom(-.8, .8), GetDefaultByType(t.linetarget.GetClass()).Radius*CFRandom(-.8, .8), GetDefaultByType(t.linetarget.GetClass()).Height*CFRandom(.1, .4));
+						
+						int Col = 25*CRandom(3, 10);
+						
+						MRSpawnParticle(Color(Col,255,Col), ParTex, SPF_FULLBRIGHT, STYLE_Add, CRandom(47, 55), CFRandom(2, 3), Pos, (0,0,2), (CFRandom(-.04, .04),CFRandom(-.04, .04),.005), Alpha: .7, SizeStep: .05);
+					}
+				}
+			}
+		}
+		
+		if(Hit.Size()<1)Return;
+		
+		Actor Who = Self;
+		Double Height = 5;
+		if(Setting&MRIWPP_BFGOnlyHitTrace){Who = target;Height = Target.Player.ViewZ-Target.Pos.Z-10;}
+		
+		Float Mult = 1;
+		For(int i=0;i<Hit.Size();i++){
+			if(Hit.Size()-1>i && Hit[i+1]==Hit[i]){Mult++;Continue;}
+			
+			Vector3 Diff, Dir, Offst;
+			Diff = Hit[i].Pos-Who.Pos;
+			Double Pit4 = Who.PitchTo(Hit[i], Height, Hit[i].Height*.5);
+			Dir = (AngleToVector(Who.AngleTo(Hit[i]), 1)*Cos(Pit4), -Sin(Pit4));
+			Offst = (AngleToVector(Who.AngleTo(Hit[i])+90, 1)*Cos(Pit4+90), -Sin(Pit4+90));
+			Double OfstVal = CFRandom(-1.5, 1.5);
+			For(float j=3;j<=Diff.Length();j+=Mult){
+				if(OfstVal<=-1.5)OfstVal += .2;
+				else if(OfstVal>=1.5)OfstVal -= .2;
+				else OfstVal += CFRandom(-.2, .2);
+				MRSpawnParticle(Color(100,255,100), ParTex, SPF_FULLBRIGHT|SPF_REPLACE, STYLE_Add, 20, Mult*2, Who.Pos + (0,0,Height) + Dir*j + Offst*Mult*OfstVal, Alpha: .1*Mult);
+			}
+			
+			Mult = 1;
+		}
+	}
+	
+	Static Void MRSpawnParticle(Color Col, TextureId Texture, int Flags=0, int Style=STYLE_None, int Life=1, double Size=1, Vector3 Pos=(0,0,0), Vector3 Vel=(0,0,0), Vector3 Accel=(0,0,0), Double Alpha=.1, Double Fade=-1, Double SizeStep=0)
+	{
+		FSpawnParticleParams p;
+		p.Accel = Accel;
+		p.Vel = Vel;
+		p.Pos = Pos;
+		
+		p.Texture = Texture;
+		p.Color1 = Col;
+		p.LifeTime = Life;
+		p.size = Size;
+		p.sizeStep = SizeStep;
+		p.startalpha = Alpha;
+		p.fadestep = Fade;
+		if(Fade==-1)p.FadeStep = Alpha/Max(1, Life-1);
+		
+		p.Flags = Flags;
+		p.Style = Style;
+		
+		Level.SpawnParticle(p);
+	}
+	
+	Double FaceCam(Actor Who=Null, Bool Pitch=false)
+	{
+		if(Pitch){
+			if(!Players[ConsolePlayer].Camera)Return Who.Pitch;
+		
+			Return Who.PitchTo(Players[ConsolePlayer].Camera, Who.Height*.5, Players[ConsolePlayer].ViewZ);
+		}
+		
+		if(!Players[ConsolePlayer].Camera)Return Who.Angle;
+		
+		Return Who.AngleTo(Players[ConsolePlayer].Camera);
+	}
+	
+	Bool MRGPartsCheckDraw(Actor mo = Null)
+	{
+		Let Plr = Players[ConsolePlayer].Camera;
+		if(!Plr)Return true;
+		
+		if(!mo)Return true;
+		
+		
+		Return (abs(DeltaAngle(Plr.Angle, Plr.AngleTo(mo)))<CVar.FindCVar("FOV").GetFloat()||Plr.Distance2D(mo)<Plr.Radius*2) && mo.CheckSight(Plr, SF_IGNOREWATERBOUNDARY|SF_SEEPASTBLOCKEVERYTHING|SF_IGNOREVISIBILITY);
+	}
+}

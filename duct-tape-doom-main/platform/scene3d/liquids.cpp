@@ -37,7 +37,7 @@ static void spout(float x,float y,int sector) {
 boolean planeImpact(sector_t *sector,boolean ceiling,fixed_t fx,fixed_t fy,fixed_t fz) {
     if(gamestate!=GS_LEVEL||levelSerial!=r_levelserial||sectorMist.size()!=(size_t)numsectors)return false;
     dropOldLevelImpacts();
-    int index=int(sector-sectors);float x=units(fx),y=units(fy),z=units(fz),now=gameSeconds();
+    int index=int(sector-sectors);float x=units(fx),y=units(fy),z=units(fz),now=leveltime/(float)TICRATE;
     if(!ceiling&&sectorMist[index].liquid) {
         if(!settings.splashes)return false;
         float tic=leveltime/(float)TICRATE; // As splash() stamps its rings.
@@ -46,18 +46,15 @@ boolean planeImpact(sector_t *sector,boolean ceiling,fixed_t fx,fixed_t fy,fixed
         spout(x,y,index);
         return true;
     }
+    shotFlat(index,ceiling,x,y,z);
+    fluidBulletFlat(index,ceiling,x,y);
+    if(!settings.gunImpacts)return false;
     if(flatDecals.size()>=96)flatDecals.erase(flatDecals.begin());
     flatDecals.push_back({x,y,now,randomRange(5.0f,7.5f),index,(bool)ceiling,randomRange(0,1)<0.5f});
     int pic=ceiling?sector->ceilingpic:sector->floorpic;
     Image &image=lumpImage(firstflat+flattranslation[pic],true);
     float light=lighting(sector);
-    if(debris.size()>512)debris.erase(debris.begin(),debris.begin()+(debris.size()-512));
-    for(int i=0;i<5;++i) {
-        float angle=randomRange(0,2*doomPi),out=randomRange(20,70);
-        debris.push_back({x,y,ceiling?z-3:z+1,std::cos(angle)*out,std::sin(angle)*out,ceiling?randomRange(-40,0):randomRange(60,140),now,
-            randomRange(0.45f,0.8f),randomRange(1.2f,2.0f),texelColor(image),light});
-    }
-    shotFlat(index,ceiling,x,y,z);
+    flatImpactParticles(x,y,z,ceiling,image,light);
     return false;
 }
 void watchSplashes() {

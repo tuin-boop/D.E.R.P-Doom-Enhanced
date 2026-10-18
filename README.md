@@ -15,6 +15,10 @@ A customized Windows build based on **Duct-Tape DOOM**, retaining its renderer a
 
 The Windows launcher includes the engine and the supplied FluidWeapons, FluidWeapons SFX add-on, and FluidMonsters packages. You do not need to add those three manually. **Commercial game IWADs are not included.** A Vulkan-capable graphics driver and Windows x64 with .NET Framework 4.5+ are required.
 
+## Latest update
+
+Optional Persistent pursuit, Aggressive AI and Advanced tactics are now available under **F4 > Monster AI**, with difficulty warnings for the two combat modes. This update also adds lost-soul collision recovery, revised gun/projectile impacts and opening-door sparks. See the [update notes](docs/changes/UPDATE-2026-10-18-2.md) for details and validation.
+
 ## Features added in this version
 
 ### Weapons and bundled mods

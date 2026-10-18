@@ -299,6 +299,7 @@ boolean PIT_CheckThing (mobj_t* thing)
     // check for skulls slamming into things
     if (tmthing->flags & MF_SKULLFLY)
     {
+	if(thing!=tmthing->target)P_TacticsChargeBlocked(tmthing);
 	damage = ((P_Random()%8)+1)*tmthing->info->damage;
 	
 	P_DamageMobj (thing, tmthing, tmthing, damage);
@@ -483,6 +484,37 @@ P_CheckPosition
 }
 
 
+// A descending lift can leave an existing monster overlapping a drop-off.
+// Allow steps farther onto the high side, never steps toward or off the ledge.
+// This checks geometry only and leaves P_CheckPosition's collision state intact.
+boolean P_RetreatFromDropoff(mobj_t *thing, fixed_t x, fixed_t y)
+{
+    fixed_t oldbox[4];
+    sector_t *sector=thing->subsector->sector;
+    boolean retreat=false;
+    int i;
+    if(demoplayback||demorecording||netgame||!(thing->flags&MF_COUNTKILL)
+       ||thing->health<=0||tmfloorz!=thing->floorz||thing->z<tmfloorz)return false;
+    oldbox[BOXLEFT]=thing->x-thing->radius;oldbox[BOXRIGHT]=thing->x+thing->radius;
+    oldbox[BOXBOTTOM]=thing->y-thing->radius;oldbox[BOXTOP]=thing->y+thing->radius;
+    for(i=0;i<sector->linecount;++i){
+        line_t *line=sector->lines[i];
+        fixed_t front,back;int highside;
+        double olddistance,newdistance;
+        if(!line->frontsector||!line->backsector)continue;
+        front=line->frontsector->floorheight;back=line->backsector->floorheight;
+        if(abs(front-back)<=24*FRACUNIT||P_BoxOnLineSide(tmbbox,line)!=-1)continue;
+        highside=front>back?0:1;
+        if(P_BoxOnLineSide(oldbox,line)!=-1||P_PointOnLineSide(thing->x,thing->y,line)!=highside
+           ||P_PointOnLineSide(x,y,line)!=highside)return false;
+        olddistance=((double)thing->x-line->v1->x)*line->dy-((double)thing->y-line->v1->y)*line->dx;
+        newdistance=((double)x-line->v1->x)*line->dy-((double)y-line->v1->y)*line->dx;
+        if(newdistance*newdistance<olddistance*olddistance)return false;
+        if(newdistance*newdistance>olddistance*olddistance)retreat=true;
+    }
+    return retreat;
+}
+
 //
 // P_TryMove
 // Attempt to move to a new position,
@@ -520,7 +552,8 @@ P_TryMove
 	    return false;	// too big a step up
 
 	if ( !(thing->flags&(MF_DROPOFF|MF_FLOAT))
-	     && tmfloorz - tmdropoffz > 24*FRACUNIT )
+	     && tmfloorz - tmdropoffz > 24*FRACUNIT
+             && !P_RetreatFromDropoff(thing,x,y) )
 	    return false;	// don't stand over a dropoff
     }
     

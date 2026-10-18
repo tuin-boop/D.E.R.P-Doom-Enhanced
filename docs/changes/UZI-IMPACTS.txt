@@ -1,0 +1,9 @@
+Uzi impacts - 2026-10-18
+
+Gun impacts (F4 > Effects) now use the supplied Stewie-Brian-Arsenal v0.233 Uzi impact art: four animated sparks, the 16-frame flash/puff sequence, and the five animated KVX voxel dust models. Exposed voxel faces and sprite runs are embedded in the engine; the external mod is not required. Cosmetic timing and movement are adapted to this renderer and use a separate random stream. A bounded pool limits rapid-fire effect accumulation.
+
+Turning Gun impacts off restores stock bullet puffs. Flesh hits keep the existing blood path.
+
+The custom rocket explosion and its menu option have been removed. Rockets use the original explosion again. Opening door sparks remain; door breaching remains withdrawn.
+
+Asset provenance is retained in assets/uzi-impacts/credits.txt. tools/import_uzi_impacts.py can regenerate the embedded art from the supplied PK3. This imports only the impact assets, not the rest of the mod.

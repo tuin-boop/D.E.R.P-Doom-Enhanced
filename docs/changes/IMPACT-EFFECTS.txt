@@ -1,0 +1,22 @@
+Impact effects and accessible Effects tab - 18 October 2026
+
+F4 > Effects (next to Display)
+- Doors: Opening door sparks; Rocket-breachable doors.
+- Combat: Gun impacts; Rocket impacts; existing blood and shootable lights.
+
+Gun impacts (default On): bullet marks, a short bright spark burst and smaller
+surface-colored chips on walls, floors and ceilings. Turning it off retains
+original bullet puffs. Liquid splashes, blood and shootable lights retain
+separate controls.
+
+Rocket impacts (default On): a bounded burst of embers and surface-colored
+debris, with scorch marks on nearby walls or floors. Turning it off retains
+the original rocket explosion. Neither option changes weapon damage/ammo.
+New particles use simulation timestamps, their own RNG and a shared cap.
+
+The previous instructions incorrectly called Atmosphere > Doors 'Effects'.
+Effects is now an actual tab, visible immediately beside Display.
+
+Validation: all 24 tests passed, including option registration/config loading,
+disabled/enabled effects and particle budgets. Fullscreen 2560x1440 captures
+checked bullet impacts, rocket explosion and the final Effects menu layout.

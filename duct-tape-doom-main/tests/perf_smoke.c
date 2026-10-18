@@ -92,7 +92,7 @@ static uint64_t combat_start;
 static double combat_times[120000],combat_intervals[120000];static int combat_count;
 static uint64_t combat_previous;
 static const char *door_save;
-static int monster_test;
+static int monster_test, monster_sim;
 static void out(const char *format, ...);
 static void monster_snapshot(int second) {
     mobj_t *player=players[consoleplayer].mo;
@@ -597,7 +597,22 @@ void I_TestFrame(void)
         map_index = 0;
         if(door_save) {
             level_serial=r_levelserial;request_time=SDL_GetTicksNS();
-            G_LoadGame((char*)door_save);state=LOADING;return;
+            G_LoadGame((char*)door_save);
+            if(monster_sim) {
+                extern void G_DoLoadGame(void);
+                G_DoLoadGame();paused=false;players[consoleplayer].cheats|=CF_GODMODE;
+                monster_snapshot(0);
+                double aiTotal=0,aiMax=0;
+                for(int tick=0;tick<350;++tick){
+                    uint64_t start=SDL_GetTicksNS();
+                    for(thinker_t *th=thinkercap.next,*next;th!=&thinkercap;th=next){next=th->next;if(th->function.acp1==(actionf_p1)P_MobjThinker)P_MobjThinker((mobj_t*)th);}
+                    double ms=(SDL_GetTicksNS()-start)/1e6;aiTotal+=ms;if(ms>aiMax)aiMax=ms;
+                    ++leveltime;if(tick%70==69)monster_snapshot((tick+1)/35);
+                }
+                out("Monster simulation: pursuit=%d mean %.3f ms/tic, maximum %.3f ms/tic (moving sectors held still).\n",p_persistentpursuit,aiTotal/350,aiMax);
+                fclose(report);fclose(csv);I_Quit();return;
+            }
+            state=LOADING;return;
         }
         request_map();
         return;
@@ -857,6 +872,7 @@ int main(int argc, char **argv)
     {
         if (!strcmp(argv[i], "-maps") && i + 1 < argc) map_filter = argv[++i];
         else if (!strcmp(argv[i], "-door-save") && i + 1 < argc) door_save=argv[++i];
+        else if (!strcmp(argv[i], "-monster-sim")) monster_sim=1;
         else if (!strcmp(argv[i], "-monster-save") && i + 1 < argc) {door_save=argv[++i];monster_test=1;}
         else if (!strcmp(argv[i], "-shot-skip") && i + 1 < argc) shot_skip = (unsigned)strtoul(argv[++i], NULL, 0);
         else if (!strcmp(argv[i], "-combat-realtime")) combat_realtime=1;

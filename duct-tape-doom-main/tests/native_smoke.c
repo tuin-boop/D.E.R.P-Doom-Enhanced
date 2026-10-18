@@ -24,6 +24,7 @@
 #include "../platform/mod_soundbank.h"
 #endif
 extern void A_PosAttack(mobj_t *actor);
+extern void P_XYMovement(mobj_t *actor);
 extern unsigned I_NamedSoundStarts(void);
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -68,6 +69,25 @@ static int stage, saved_ammo, saved_health, player_flashes, enemy_flashes;
 static int test_weapon=wp_pistol,test_ammo=am_clip;
 static int test_episode=1,test_start;
 static int routed_sounds;
+static fixed_t aim_velocity[3];static int aim_exploded;
+static void capture_aim_impact(mobj_t *m){aim_velocity[0]=m->momx;aim_velocity[1]=m->momy;aim_velocity[2]=m->momz;aim_exploded=1;}
+static void test_projectile_pitch(void){
+    boolean oldfree=freeaim;float oldpitch=tourpitch;void (*oldhook)(mobj_t*)=R_RocketImpact;
+    R_RocketImpact=capture_aim_impact;freeaim=true;
+    for(int kind=0;kind<3;++kind)for(int dir=-1;dir<=1;++dir){
+        mobjtype_t type=kind==0?MT_ROCKET:kind==1?MT_PLASMA:MT_BFG;
+        tourpitch=dir*.65f;aim_exploded=0;P_SpawnPlayerMissile(players[0].mo,type);
+        mobj_t *m=(mobj_t*)thinkercap.prev;
+        if(m->type!=type||m->target!=players[0].mo)I_Error("Missing aimed projectile");
+        if(!aim_exploded){aim_velocity[0]=m->momx;aim_velocity[1]=m->momy;aim_velocity[2]=m->momz;}
+        if((dir>0&&aim_velocity[2]<=0)||(dir<0&&aim_velocity[2]>=0)||(dir==0&&aim_velocity[2]!=0))I_Error("Projectile did not follow vertical aim");
+        double speed=sqrt((double)aim_velocity[0]*aim_velocity[0]+(double)aim_velocity[1]*aim_velocity[1]+(double)aim_velocity[2]*aim_velocity[2]);
+        if(fabs(speed-m->info->speed)>FRACUNIT*.02)I_Error("Aimed projectile changed total speed");
+        P_RemoveMobj(m);
+    }
+    R_RocketImpact=oldhook;freeaim=oldfree;tourpitch=oldpitch;
+    puts("Rocket/plasma/BFG upward, downward and level aim preserves projectile speed.");
+}
 static void test_fast_pistol(void){
     if(!M_CheckParm("-fluidweapons"))return;
     extern int p_fluidfastpistol;
@@ -87,6 +107,134 @@ static void test_fast_pistol(void){
     P_MovePsprites(p);if(p->ammo[am_misl]!=9||p->psprites[ps_weapon].tics!=12)I_Error("Rocket launch or recovery timing mismatch");
     p->readyweapon=wp_pistol;P_SetupPsprites(p);
     puts("Pistol: optional 10-tic fast and 14-tic normal firing cadence passed.");
+}
+static int aggressiveShotsCount,aggressiveShotTimes[8];
+static mobj_t *aggressiveTestActor;
+static void aggressive_flash(mobj_t *actor,int weapon,int projectile){
+    if(actor==aggressiveTestActor&&aggressiveShotsCount<8)aggressiveShotTimes[aggressiveShotsCount++]=leveltime;
+}
+static void test_aggressive_ai(void){
+    extern int p_fluidfastpistol;
+    extern boolean P_CheckMissileRange(mobj_t *actor);
+    int enabled=p_aggressiveai,oldtime=leveltime,fast=p_fluidfastpistol;
+    fixed_t laneX=0,laneY=0;
+    player_t *player=&players[0];mobj_t *target=player->mo;
+    int cheats=player->cheats;fixed_t mx=target->momx,my=target->momy;
+    void (*flash)(mobj_t*,int,int)=R_MuzzleFlash;
+    P_SetAggressiveAI(1);player->cheats|=CF_GODMODE;R_MuzzleFlash=aggressive_flash;
+    for(int mode=0;mode<3;++mode){
+        mobj_t *actor=NULL;p_fluidfastpistol=mode==1;
+        for(int direction=0;direction<4;++direction){
+            fixed_t x=target->x+(direction==0?64:direction==1?-64:0)*FRACUNIT;
+            fixed_t y=target->y+(direction==2?64:direction==3?-64:0)*FRACUNIT;
+            actor=P_SpawnMobj(x,y,ONFLOORZ,mode==2?MT_SHOTGUY:MT_POSSESSED);actor->target=target;actor->reactiontime=0;
+            if(P_CheckPosition(actor,x,y)&&P_CheckMissileRange(actor))break;
+            P_RemoveMobj(actor);actor=NULL;
+        }
+        if(!actor)I_Error("No clear firing lane for aggressive AI test");
+        laneX=actor->x;laneY=actor->y;
+        aggressiveTestActor=actor;aggressiveShotsCount=0;
+        P_SetMobjState(actor,actor->info->missilestate);
+        for(int tic=0;tic<180&&aggressiveShotsCount<4;++tic){++leveltime;P_MobjThinker(actor);}
+        int expected=mode==2?37:(mode==1&&P_FluidWeaponsEnabled()?10:14);
+        if(aggressiveShotsCount<4)I_Error("Aggressive shooter stopped firing mode %d",mode);
+        for(int n=1;n<4;++n)if(aggressiveShotTimes[n]-aggressiveShotTimes[n-1]!=expected)I_Error("Aggressive cadence mode %d: %d vs %d",mode,aggressiveShotTimes[n]-aggressiveShotTimes[n-1],expected);
+        // Real projectile feedback: a miss requests a movement burst; a hit does not.
+        P_AggressiveRemove(actor);mobj_t missile={0};P_AggressiveMissile(&missile,actor);P_AggressiveImpact(&missile);
+        if(P_CheckMissileRange(actor))I_Error("Missed projectile did not request repositioning");
+        P_AggressiveRemove(actor);P_AggressiveMissile(&missile,actor);P_AggressiveContact(target,&missile,actor);P_AggressiveImpact(&missile);
+        if(!P_CheckMissileRange(actor))I_Error("Successful projectile incorrectly requested repositioning");
+        actor->health=100;P_AggressiveDamage(actor,target,target,40);
+        if(P_CheckMissileRange(actor))I_Error("Heavy damage did not stagger shooter");
+        P_RemoveMobj(actor);
+    }
+    {
+        extern void A_Chase(mobj_t*);
+        mobj_t *fat=P_SpawnMobj(laneX,laneY,ONFLOORZ,MT_FATSO),aim;
+        fat->target=target;fat->reactiontime=0;fat->threshold=100;
+        for(int volley=0;volley<3;++volley)A_Chase(fat);
+        if(!P_AggressiveBarrageAim(fat,&aim))I_Error("Mancubus did not start occasional barrage");
+        fixed_t originalX=target->x;target->x+=128*FRACUNIT;
+        if(!P_AggressiveBarrageAim(fat,&aim)||aim.x!=originalX)I_Error("Barrage incorrectly tracks moving target");
+        target->x=originalX;leveltime+=161;
+        if(P_AggressiveBarrageAim(fat,&aim))I_Error("Mancubus barrage did not expire");
+        P_RemoveMobj(fat);
+    }
+    demoplayback=true;if(P_AggressiveEnabled())I_Error("Aggressive AI changed demos");demoplayback=false;
+    P_SetAggressiveAI(0);if(P_AggressiveStateTics(target,S_POSS_ATK1,10)!=10)I_Error("Disabled AI changed animation timings");
+    P_SetAggressiveAI(enabled);leveltime=oldtime;p_fluidfastpistol=fast;player->cheats=cheats;target->momx=mx;target->momy=my;R_MuzzleFlash=flash;aggressiveTestActor=NULL;
+    puts("Aggressive AI: live pistol/shotgun cadence, projectile hits/misses, heavy-hit stagger, fixed-position barrages and demo guards passed.");
+}
+static void test_advanced_tactics(void){
+    int setting=p_advancedtactics,oldtime=leveltime;P_SetAdvancedTactics(1);
+    mobj_t target={0},actor={0},aim;target.health=100;target.flags=MF_SHOOTABLE;
+    target.x=512*FRACUNIT;target.momx=12*FRACUNIT;
+    actor.health=100;actor.flags=MF_COUNTKILL;actor.target=&target;actor.type=MT_CYBORG;
+    P_TacticsFired(&actor);
+    if(!P_TacticsAim(&actor,&aim)||aim.x<=target.x||aim.x>target.x+96*FRACUNIT)I_Error("Predictive rocket aim not bounded");
+    P_TacticsRemove(&actor);actor.type=MT_FATSO;
+    if(!P_TacticsAim(&actor,&aim))I_Error("Focused mancubus volley missing");
+    fixed_t locked=aim.x;target.x+=128*FRACUNIT;P_TacticsFired(&actor);
+    if(!P_TacticsAim(&actor,&aim)||aim.x!=locked)I_Error("Focused volley followed target");
+    angle_t focused=P_TacticsFatSpread(&actor);
+    for(int n=1;n<6;++n)P_TacticsFired(&actor);
+    if(P_TacticsFatSpread(&actor)<=focused)I_Error("Mancubus did not alternate wide volley");
+    P_TacticsRemove(&actor);
+    // Exercise safe vertical motion in an actual loaded sector.
+    mobj_t *player=players[0].mo,*caco=P_SpawnMobj(player->x+64*FRACUNIT,player->y,ONFLOORZ,MT_HEAD);
+    caco->target=player;caco->z=caco->ceilingz-caco->height-8*FRACUNIT;
+    fixed_t before=caco->z;leveltime=(leveltime+1)&~1;P_TacticsTick(caco);
+    if(caco->z+caco->height>caco->ceilingz||caco->z<caco->floorz||abs(caco->z-before)>FRACUNIT)I_Error("Cacodemon tactics exceeded clearance or speed");
+    P_RemoveMobj(caco);
+    // Lost souls lack MF_COUNTKILL. Exercise the real decoration collision path,
+    // including aggressive attack gating and a direct charge action retry.
+    {
+        extern mobj_t *tmthing;extern fixed_t tmx,tmy;
+        extern boolean PIT_CheckThing(mobj_t*),P_CheckMissileRange(mobj_t*);
+        extern void A_SkullAttack(mobj_t*);
+        mobj_t *skull=P_SpawnMobj(player->x+64*FRACUNIT,player->y,ONFLOORZ,MT_SKULL);
+        mobj_t torch={0};torch.flags=MF_SOLID;torch.radius=16*FRACUNIT;torch.health=1000;
+        torch.x=skull->x;torch.y=skull->y;
+        mobj_t *savedThing=tmthing;fixed_t savedX=tmx,savedY=tmy;
+        skull->target=player;skull->flags|=MF_SKULLFLY;skull->momx=20*FRACUNIT;
+        tmthing=skull;tmx=skull->x;tmy=skull->y;
+        if(PIT_CheckThing(&torch)||!P_TacticsAttackBlocked(skull)||skull->flags&MF_SKULLFLY)
+            I_Error("Lost soul did not recover from solid decoration");
+        int aggressive=p_aggressiveai;P_SetAggressiveAI(1);
+        if(P_CheckMissileRange(skull))I_Error("Aggressive AI bypassed charge recovery");
+        A_SkullAttack(skull);
+        if(skull->flags&MF_SKULLFLY)I_Error("Direct charge bypassed recovery");
+        leveltime+=2*TICRATE;
+        if(P_TacticsAttackBlocked(skull))I_Error("Charge recovery never expired");
+        P_SetAdvancedTactics(0);P_TacticsChargeBlocked(skull);
+        if(P_TacticsAttackBlocked(skull))I_Error("Disabled tactics changed lost soul");
+        P_SetAdvancedTactics(1);P_SetAggressiveAI(aggressive);
+        tmthing=savedThing;tmx=savedX;tmy=savedY;P_RemoveMobj(skull);
+    }
+    demoplayback=true;if(P_TacticsEnabled())I_Error("Advanced tactics changed demo behavior");demoplayback=false;
+    actor.target=NULL;if(P_TacticsMove(&actor)||P_TacticsAim(&actor,&aim))I_Error("Tactics woke unaware monster");
+    P_SetAdvancedTactics(0);actor.target=&target;
+    if(P_TacticsAim(&actor,&aim)||P_TacticsFatSpread(&actor)!=ANG90/8)I_Error("Disabled tactics changed attacks");
+    P_SetAdvancedTactics(setting);leveltime=oldtime;
+    puts("Advanced tactics: bounded prediction, alternating/fixed volleys, aerial clearance and disabled/demo guards passed.");
+}
+static void test_pursuit_guards(void){
+    extern int prndindex;
+    int setting=p_persistentpursuit,random=prndindex;
+    mobj_t actor={0},target={0};actor.flags=MF_COUNTKILL;actor.target=&target;
+    p_persistentpursuit=0;
+    if(P_PersistentPursuit(&actor))I_Error("Disabled pursuit changed movement");
+    p_persistentpursuit=1;demoplayback=true;
+    if(P_PersistentPursuit(&actor))I_Error("Pursuit changed demo playback");
+    demoplayback=false;demorecording=true;
+    if(P_PersistentPursuit(&actor))I_Error("Pursuit changed demo recording");
+    demorecording=false;netgame=true;
+    if(P_PersistentPursuit(&actor))I_Error("Pursuit changed network movement");
+    netgame=false;actor.target=NULL;
+    if(P_PersistentPursuit(&actor))I_Error("Pursuit woke an unaware monster");
+    if(actor.x||actor.y||prndindex!=random)I_Error("Pursuit guard changed state or random stream");
+    p_persistentpursuit=setting;
+    puts("Persistent pursuit: toggle, unaware monsters, demos, network and RNG guards passed.");
 }
 static void test_overlap_escape(void){
     extern mobj_t *tmthing;extern fixed_t tmx,tmy;extern boolean PIT_CheckThing(mobj_t*);
@@ -110,6 +258,27 @@ static void test_overlap_escape(void){
         tmx=13*FRACUNIT;if(PIT_CheckLine(&line))I_Error("Spawn wall escape moved into wall");
         tmx=-19*FRACUNIT;if(PIT_CheckLine(&line))I_Error("Spawn wall escape crossed wall");
         a.x=32*FRACUNIT;tmx=29*FRACUNIT;if(PIT_CheckLine(&line))I_Error("Spawn wall escape allowed new overlap");
+    }
+    {
+        extern boolean P_RetreatFromDropoff(mobj_t*,fixed_t,fixed_t);
+        extern fixed_t tmbbox[4],tmfloorz;
+        fixed_t savedFloor=tmfloorz;
+        sector_t high={0},low={0};subsector_t sub={0};
+        vertex_t v1={0,0},v2={0,100*FRACUNIT};line_t line={0};line_t *edges[]={&line};
+        high.linecount=1;high.lines=edges;low.floorheight=-104*FRACUNIT;
+        line.v1=&v1;line.v2=&v2;line.dy=100*FRACUNIT;line.slopetype=ST_VERTICAL;
+        line.frontsector=&high;line.backsector=&low;sub.sector=&high;a.subsector=&sub;
+        a.x=24*FRACUNIT;a.y=50*FRACUNIT;a.z=a.floorz=tmfloorz=0;
+        tmbbox[BOXLEFT]=-3*FRACUNIT;tmbbox[BOXRIGHT]=57*FRACUNIT;
+        tmbbox[BOXBOTTOM]=20*FRACUNIT;tmbbox[BOXTOP]=80*FRACUNIT;
+        if(!P_RetreatFromDropoff(&a,27*FRACUNIT,a.y))I_Error("Lowered lift retreat rejected");
+        if(P_RetreatFromDropoff(&a,21*FRACUNIT,a.y))I_Error("Retreat allowed approach to cliff");
+        if(P_RetreatFromDropoff(&a,-3*FRACUNIT,a.y))I_Error("Retreat allowed falling off cliff");
+        a.x=32*FRACUNIT;if(P_RetreatFromDropoff(&a,27*FRACUNIT,a.y))I_Error("Retreat allowed new ledge overlap");
+        a.x=24*FRACUNIT;demoplayback=true;
+        if(P_RetreatFromDropoff(&a,27*FRACUNIT,a.y))I_Error("Retreat changed demo behavior");
+        demoplayback=false;tmfloorz=savedFloor;
+        puts("Lowered lift: safe retreat, cliff avoidance and demo compatibility passed.");
     }
     tmthing=previous;
     puts("Monster overlap: separation, deeper/new collisions and demo compatibility passed.");
@@ -286,6 +455,57 @@ void I_TestFrame(void)
 {
     int test_tic=gametic-test_start;
 #ifdef DOOM_RENDER3D
+    if(getenv("DOOM_CAPTURE_IMPACTS")&&gamestate==GS_LEVEL){
+        static int start=-1,shot=0,capture=0,menu=0;player_t *p=&players[0];
+        if(start<0){
+            line_t *face=0;
+            for(int i=0;i<numlines;++i){line_t *l=&lines[i];
+                if(l->special==1&&l->backsector&&l->backsector->floorheight==l->backsector->ceilingheight){face=l;break;}}
+            if(!face)I_Error("No impact capture wall");
+            double dx=(double)face->dx/FRACUNIT,dy=(double)face->dy/FRACUNIT,len=sqrt(dx*dx+dy*dy);
+            fixed_t x=(fixed_t)(((double)face->v1->x+face->v2->x)/2+dy/len*96*FRACUNIT);
+            fixed_t y=(fixed_t)(((double)face->v1->y+face->v2->y)/2-dx/len*96*FRACUNIT);
+            P_TeleportMove(p->mo,x,y);p->mo->z=p->mo->floorz;p->viewz=p->mo->z+VIEWHEIGHT;
+            p->mo->angle=R_PointToAngle2(x,y,(face->v1->x+face->v2->x)/2,(face->v1->y+face->v2->y)/2);
+            p->cheats|=CF_GODMODE;start=gametic;R_SetViewSize(11,0);
+        }
+        int t=gametic-start;
+        if(shot<3&&t>=10+shot*15){P_LineAttack(p->mo,p->mo->angle,MISSILERANGE,0,5);++shot;}
+        if(shot==3&&t>=65){P_SpawnPlayerMissile(p->mo,MT_ROCKET);++shot;}
+        int extended=getenv("DOOM_CAPTURE_FLUID_PROJECTILES")!=NULL;
+        if(extended&&shot==4&&t>=105){P_SpawnPlayerMissile(p->mo,MT_PLASMA);++shot;}
+        if(extended&&shot==5&&t>=145){P_SpawnPlayerMissile(p->mo,MT_BFG);++shot;}
+        const int captures[]={12,27,42,72,76,83,100,112,130,155,180,210};
+        if(capture<(extended?12:7)&&t>=captures[capture]){I_Render3DScreenshot();++capture;}
+        if(!extended&&t>=95&&!menu){I_Render3DSettingsMenu();for(int i=0;i<2;++i)I_Render3DSettingsKey(SDL_SCANCODE_TAB,0);menu=1;}
+        if(t>(extended?225:115))I_Quit();return;
+    }
+    if(getenv("DOOM_CAPTURE_DOORS")&&gamestate==GS_LEVEL){
+        static int start=-1,last=-1,closed=0,shots=0;static line_t *face;static fixed_t x,y;
+        player_t *p=&players[0];
+        if(start<0){
+            for(int i=0;i<numlines;++i){line_t *l=&lines[i];sector_t *sec=l->backsector;
+                if(l->special==1&&sec&&!sec->tag&&!sec->special&&!sec->specialdata&&sec->floorheight==sec->ceilingheight){face=l;break;}}
+            if(!face)I_Error("No door for capture");
+            double dx=(double)face->dx/FRACUNIT,dy=(double)face->dy/FRACUNIT,len=sqrt(dx*dx+dy*dy);
+            x=(fixed_t)(((double)face->v1->x+face->v2->x)/2+dy/len*96*FRACUNIT);
+            y=(fixed_t)(((double)face->v1->y+face->v2->y)/2-dx/len*96*FRACUNIT);
+            P_TeleportMove(p->mo,x,y);p->mo->z=p->mo->floorz;p->viewz=p->mo->z+VIEWHEIGHT;
+            p->mo->angle=R_PointToAngle2(x,y,(face->v1->x+face->v2->x)/2,(face->v1->y+face->v2->y)/2);
+            p->cheats|=CF_GODMODE;start=gametic;R_SetViewSize(11,0);EV_VerticalDoor(face,p->mo);
+        }
+        int t=gametic-start;if(last==t)return;last=t;
+
+        if(t==8||t==12||t==22||t==30||t==40||t==65||t==163||t==175){fprintf(stderr,"Door capture tic %d height %d thinker %p hits %d\n",t,face->backsector->ceilingheight/FRACUNIT,face->backsector->specialdata,face->backsector->rocketdoorhits);I_Render3DScreenshot();}
+        if(t>=75&&!closed){EV_VerticalDoor(face,p->mo);closed=1;}
+        if(shots<3&&t>=150+10*shots){
+            ++shots;
+            mobj_t rocket={0};rocket.type=MT_ROCKET;rocket.target=p->mo;rocket.x=x;rocket.y=y;
+            rocket.z=face->backsector->floorheight+48*FRACUNIT;rocket.height=8*FRACUNIT;
+            p_destructibledoors=1;P_RocketDoorImpact(&rocket,face);
+        }
+        if(t>190)I_Quit();return;
+    }
     if(getenv("DOOM_CAPTURE_SSG_FIDGET")) {
         static int captured=-1;
         if(test_tic!=captured&&(test_tic==205||test_tic==207||test_tic==210||test_tic==215||test_tic==275||test_tic==280)) {
@@ -433,6 +653,10 @@ void I_TestFrame(void)
         test_map_sound_origins();
         test_fluid_monsters();
         test_overlap_escape();
+        test_pursuit_guards();
+        test_aggressive_ai();
+        test_advanced_tactics();
+        test_projectile_pitch();
         test_fast_pistol();
         {
             int weapons=p_fluidweapons,monsters=p_fluidmonsters;
@@ -441,6 +665,7 @@ void I_TestFrame(void)
             p_fluidweapons=weapons;p_fluidmonsters=monsters;
 #ifdef DOOM_RENDER3D
             extern void I_TestBundledModSettings(void);I_TestBundledModSettings();
+            {extern void I_TestImpactOptions(void);I_TestImpactOptions();}
 #endif
         }
         const char *requested=getenv("DOOM_TEST_WEAPON");
@@ -519,6 +744,7 @@ void I_TestFrame(void)
             reference->target=players[0].mo;reference->tracer=players[0].mo;
         }
         P_NoticeWeapon(&players[0],wp_bfg);notice_count(N_WEAPON);
+        sectors[0].rocketdoorhits=2;
         G_SaveGame(5, "Native smoke test"); stage = 4;
     }
     else if (stage == 4 && test_tic >= 150 && gameaction == ga_nothing)
@@ -527,12 +753,14 @@ void I_TestFrame(void)
         if (!file) I_Error("Smoke test: save file was not created");
         fclose(file);
         players[0].ammo[test_ammo] = 1;
+        sectors[0].rocketdoorhits=0;
         G_LoadGame("doomsav5.dsg"); stage = 5;
     }
     else if (stage == 5 && test_tic >= 165 && gameaction == ga_nothing)
     {
         if (players[0].ammo[test_ammo] != saved_ammo || players[0].health != saved_health)
             I_Error("Smoke test: saved player state was not restored");
+        if(sectors[0].rocketdoorhits!=2)I_Error("Door damage lost through actual save/load");
         if (!players[0].mo) I_Error("Smoke test: player object was not restored");
         {
             thinker_t *thinker;int found=0;

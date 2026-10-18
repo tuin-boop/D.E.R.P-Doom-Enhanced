@@ -32,6 +32,7 @@ struct Line { const OptionSection *section; Option *option; };
 
 struct Panel {
     bool open=false,wasPaused=false;
+    int aiWarning=0; // 1: advanced tactics, 2: aggressive AI
     Settings draft;
     std::vector<OptionTab> tabs;
     std::vector<Line> lines;
@@ -251,7 +252,13 @@ void changeOption(int direction) {
     Option &option=selectedOption();
     if(!option.isEnabled(panel.draft)) {S_StartSound(NULL,sfx_oof);return;}
     if(option.kind==OptionKind::Action){if(direction>0&&option.action)option.action();return;}
-    if(option.kind==OptionKind::Check)*option.flag=!*option.flag;
+    if(option.kind==OptionKind::Check){
+        *option.flag=!*option.flag;
+        if(*option.flag){
+            if(option.flag==&panel.draft.advancedTactics)panel.aiWarning=1;
+            else if(option.flag==&panel.draft.aggressiveAI)panel.aiWarning=2;
+        }
+    }
     else if(option.kind==OptionKind::Choice) {
         int count=(int)option.values.size(),index=0;
         for(int i=0;i<count;++i)if(option.values[(size_t)i]==*option.flag)index=i;
@@ -288,6 +295,7 @@ void drawSlider(const Option &option,int row,bool enabled) {
 
 void I_Render3DSettingsMenu(void) {
     if(panel.open)return;
+    panel.aiWarning=0;
     panel.draft=settings;
     if(auto *window=SDL_GetKeyboardFocus())panel.draft.fullscreen=(SDL_GetWindowFlags(window)&SDL_WINDOW_FULLSCREEN)!=0;
     panel.tabs=optionTabs(panel.draft);
@@ -302,6 +310,7 @@ int I_Render3DSettingsOpen(void) { return panel.open; }
 
 void I_Render3DSettingsKey(int scancode,int shift) {
     if(!panel.open)return;
+    if(panel.aiWarning){panel.aiWarning=0;return;}
     switch(scancode) {
     case SDL_SCANCODE_UP: moveSelection(-1); break;
     case SDL_SCANCODE_DOWN: moveSelection(1); break;
@@ -323,6 +332,7 @@ void I_Render3DSettingsKey(int scancode,int shift) {
 
 void I_Render3DSettingsClick(int x,int y,int button) {
     if(!panel.open||x<0||y<0||x>=width||y>=height)return;
+    if(panel.aiWarning){if(button)panel.aiWarning=0;return;}
     int row=y/cellHeight;
     if(row==tabRow) {
         if(button!=1)return;
@@ -395,6 +405,13 @@ void I_Render3DSettingsDraw(unsigned *pixels) {
     for(size_t i=0;i<lines.size();++i)drawText(lines[i],leftColumn,descriptionRow+(int)i,description);
     std::string help="Up/Down select   Left/Right change   Tab page   R defaults   Esc done";
     drawTextAt(help,(width-textWidth(help))/2,helpRow,dim);
+    if(panel.aiWarning){
+        fill(24,128,width-48,144,0xff180c08);
+        drawText(panel.aiWarning==2?"AGGRESSIVE AI ENABLED":"ADVANCED TACTICS ENABLED",6,9,heading);
+        drawText("Warning: this can make the game hard,",6,11,bright);
+        drawText("and VERY HARD with pistol starts.",6,12,heading);
+        drawText("Press any key or click to continue.",6,15,description);
+    }
     // The renderer repeats the border texels beyond the image, so they stay plain backdrop.
     fill(0,0,width,1,backdrop);fill(0,height-1,width,1,backdrop);
     fill(0,0,1,height,backdrop);fill(width-1,0,1,height,backdrop);

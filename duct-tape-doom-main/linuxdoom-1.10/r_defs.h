@@ -109,6 +109,7 @@ typedef	struct
     short	lightlevel;
     short	special;
     short	tag;
+    unsigned char rocketdoorhits; // 3 means permanently breached; saved in extension.
 
     // 0 = untraversed, 1,2 = sndlines -1
     int		soundtraversed;

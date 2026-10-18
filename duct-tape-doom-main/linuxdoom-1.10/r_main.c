@@ -57,6 +57,9 @@ void (*R_BeforeTic)(void);
 void (*R_MuzzleFlash)(mobj_t *source, int weapon, int projectile);
 void (*R_WeaponAttack)(player_t *player);
 void (*R_WeaponAux)(int alt, int reload);
+void (*R_RocketImpact)(mobj_t *rocket);
+void (*R_DoorMotion)(sector_t *sector);
+void (*R_DoorDamage)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z, int broken);
 void (*R_WallImpact)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z);
 void (*R_BloodHit)(mobj_t *target, fixed_t x, fixed_t y, fixed_t z, fixed_t dx, fixed_t dy, int damage);
 boolean (*R_PlaneImpact)(sector_t *sector, boolean ceiling, fixed_t x, fixed_t y, fixed_t z);
@@ -914,3 +917,5 @@ void R_RenderPlayerView (player_t* player)
     // Check for new console commands.
     NetUpdate ();				
 }
+
+void (*R_BFGHit)(mobj_t *ball,mobj_t *victim)=0;

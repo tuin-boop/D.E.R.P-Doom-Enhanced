@@ -827,6 +827,8 @@ P_DamageMobj
     if (target->health <= 0)
 	return;
 
+    P_AggressiveContact(target,inflictor,source);
+
     if ( target->flags & MF_SKULLFLY )
     {
 	target->momx = target->momy = target->momz = 0;
@@ -922,6 +924,7 @@ P_DamageMobj
     }
     
     // do the damage	
+    P_AggressiveDamage(target,inflictor,source,damage);
     target->health -= damage;	
     if (target->health <= 0)
     {

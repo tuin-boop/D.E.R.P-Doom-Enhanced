@@ -28,7 +28,7 @@ void main() {
         alpha=step((float(2*(q.x^q.y)+q.y)+0.5)/4.0,spread);
     } else if((vMode&MODE_HARD_SILHOUETTE)!=0u) alpha=step(0.5,alpha);
     if(alpha<0.02) discard;
-    outColor=vec4(0,0,0,alpha*vLight);
+    outColor=vec4(vTint,alpha*vLight);
 #else
     float softness=1.0;
     float alpha=shadowCoverage(vUV)*0.4;

@@ -53,6 +53,26 @@ std::vector<OptionTab> optionTabs(Settings &s) {
             {"Retro look",{
                 check("retro","Retro scanlines",&s.retro,"Dark lines between the rows of the picture, like an old CRT monitor."),
                 check("palette","Doom palette colors",&s.palette,"Quantize the final lighting and fog to the current WAD palette.")}}}},
+        {"Effects",{
+            {"Doors",{
+                check("door_sparks","Opening door sparks",&s.doorSparks,"Small sparks along the side tracks while a nearby door opens. Cosmetic only.")}},
+            {"Combat",{
+                check("gun_impacts","Gun impacts",&s.gunImpacts,"Uzi animated sparks, voxel dust and impact puff from Stewie-Brian Arsenal. Disable to restore original bullet puffs. Blood and shootable lights have separate options."),
+                check("blood","Blood splats and pools",&s.blood,
+                    "Hitscan hits leave splats on floors and nearby walls; corpses grow a pool. Colors come from the WAD's blood sprite."),
+                check("blood_shine","Wet blood shine",&s.bloodShine,"Fresh blood on the floor glints in a brighter palette red under dynamic lights, then dries matte.",
+                    [](const Settings &d){return d.blood!=0;}),
+                check("soft_effects","Soft effect sprites",&s.softSprites,"Explosions, puffs and teleport fog stop slicing into walls and dissolve on a dither at floors."),
+                check("shootable_lights","Shootable lights",&s.shootableLights,
+                    "Computer panels and tech walls throw blue sparks when shot. A shot or fireball into the glowing part "
+                    "of a lamp or screen breaks its whole fixture, and rockets and barrels break those around them: they sputter out "
+                    "and go dark, and the room darkens with them a moment later. Render-only: monsters see as before, and the lights "
+                    "are back after a reload.",
+                    [](const Settings &d){return d.emissive!=0;}),
+                check("kill_shots_carry","Kill shots carry on",&s.killShotsCarry,
+                    "A bullet or pellet that kills what it hits carries on past the body, so a fight can shoot out the lamps and "
+                    "screens behind the monsters. Only for sparks and lights, never damage: the game sees the shot stop as always.",
+                    [](const Settings &d){return d.emissive!=0&&d.shootableLights!=0;})}}}},
         {"Textures",{
             {"Filtering",{
                 choice("filter","Walls and floors",&s.filter,{"Crisp pixels","Smooth (bilinear)","Sharp bilinear"},{0,1,2},
@@ -102,6 +122,11 @@ std::vector<OptionTab> optionTabs(Settings &s) {
                 check("glowing_eyes","Glowing eyes",&s.glowingEyes,
                     "The eyes painted into monster artwork glow in the dark: the zombies' and imp's red, the demon's yellow, "
                     "the cacodemon's and mancubus's green, the arachnotron's blue. Picked by hand for stock monsters, searched for in other artwork; bloom needs emissive textures.")}}}},
+        {"Monster AI",{
+            {"Navigation",{
+                check("advanced_tactics","Advanced tactics",&s.advancedTactics,"WARNING: Can make the game hard, and very hard with pistol starts. Adds monster-specific movement, cover, suppression and predictive attacks. Single-player only."),
+                check("aggressive_ai","Aggressive AI",&s.aggressiveAI,"WARNING: Can make the game hard, and very hard with pistol starts. Adds sustained attacks, faster gunfire, repositioning and barrages. Single-player only."),
+                check("persistent_pursuit","Persistent pursuit",&s.persistentPursuit,"Alerted monsters search around walls and retry blocked routes. Off keeps original AI. Single-player only; does not wake unaware monsters.")}}}},
         {"Bundled mods",{
             {"Enable / disable",{
                 check("mod_fluid_weapons","FluidWeapons",&s.fluidWeapons,"Toggle weapon animations and Fluid firing behavior. Applies immediately."),
@@ -186,22 +211,6 @@ std::vector<OptionTab> optionTabs(Settings &s) {
                 check("sun_disc","Sun in the sky",&s.sunDisc,"A faint sun disc and soft glow where the baked sunlight comes from, over the sky texture's brightest part."),
                 check("dust_motes","Dust motes",&s.dust,"Specks that glint in indoor sunbeams and the flashlight beam."),
                 check("heat_haze","Heat haze",&s.heatHaze,"Rows of pixels shimmer above lava, hot damaging floors and flames.")}},
-            {"Combat",{
-                check("blood","Blood splats and pools",&s.blood,
-                    "Hitscan hits leave splats on floors and nearby walls; corpses grow a pool. Colors come from the WAD's blood sprite."),
-                check("blood_shine","Wet blood shine",&s.bloodShine,"Fresh blood on the floor glints in a brighter palette red under dynamic lights, then dries matte.",
-                    [](const Settings &d){return d.blood!=0;}),
-                check("soft_effects","Soft effect sprites",&s.softSprites,"Explosions, puffs and teleport fog stop slicing into walls and dissolve on a dither at floors."),
-                check("shootable_lights","Shootable lights",&s.shootableLights,
-                    "Computer panels and tech walls throw blue sparks when shot. A shot or fireball into the glowing part "
-                    "of a lamp or screen breaks its whole fixture, and rockets and barrels break those around them: they sputter out "
-                    "and go dark, and the room darkens with them a moment later. Render-only: monsters see as before, and the lights "
-                    "are back after a reload.",
-                    [](const Settings &d){return d.emissive!=0;}),
-                check("kill_shots_carry","Kill shots carry on",&s.killShotsCarry,
-                    "A bullet or pellet that kills what it hits carries on past the body, so a fight can shoot out the lamps and "
-                    "screens behind the monsters. Only for sparks and lights, never damage: the game sees the shot stop as always.",
-                    [](const Settings &d){return d.emissive!=0&&d.shootableLights!=0;})}},
             {"Liquids",{
                 check("reflections","Reflections",&s.reflections,
                     "Mirror the scene in nearby water; renders the view a second time at half resolution."),

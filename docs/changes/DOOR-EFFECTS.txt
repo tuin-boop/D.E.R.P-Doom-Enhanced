@@ -1,0 +1,20 @@
+Door effects prototype - 18 October 2026
+
+F4 > Effects > Doors:
+- Opening door sparks (on by default): brief amber sparks follow both side
+  tracks while the door rises. Closing/stationary doors do not emit them.
+  Nearby effects only, with a shared particle budget; cosmetic RNG only.
+- Rocket-breachable doors (off by default): three direct player rocket hits
+  permanently open eligible ordinary manual doors, with impact marks,
+  sparks and wall-colored fragments. This uses fast retraction, not holes.
+  Key doors, tagged sectors and doors with other boundary actions are excluded.
+  Disabled during demo playback/recording and multiplayer.
+
+Damage and breached state survive save/load. Turning the option off prevents
+new damage but does not restore an already breached doorway. Visual impact
+marks and fragments are temporary and are not serialized.
+
+Validation: 24-test suite passed; final native and GPU gameplay/save/load
+checks passed again after final changes. Real missile collision, three-hit
+threshold, protection rules, manual use after breach, and save extension
+covered by regression checks. Visual check at fullscreen 2560x1440.

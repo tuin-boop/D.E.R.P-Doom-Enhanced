@@ -26,6 +26,7 @@ static const char
 rcsid[] = "$Id: p_mobj.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
 #include <stdio.h>
+#include <math.h>
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_random.h"
@@ -72,7 +73,7 @@ P_SetMobjState
 
 	st = &states[state];
 	mobj->state = st;
-	mobj->tics = st->tics;
+	mobj->tics = P_AggressiveStateTics(mobj,state,st->tics);
 	mobj->sprite = st->sprite;
 	mobj->frame = st->frame;
 
@@ -93,9 +94,12 @@ P_SetMobjState
 //
 void P_ExplodeMissile (mobj_t* mo)
 {
+    if (R_RocketImpact && (mo->flags & MF_MISSILE))
+        R_RocketImpact(mo);
     mo->momx = mo->momy = mo->momz = 0;
 
     P_SetMobjState (mo, mobjinfo[mo->type].deathstate);
+    P_AggressiveImpact(mo);
 
     mo->tics -= P_Random()&3;
 
@@ -170,6 +174,7 @@ void P_XYMovement (mobj_t* mo)
 		
 	if (!P_TryMove (mo, ptryx, ptryy))
 	{
+	    if(mo->flags&MF_SKULLFLY)P_TacticsChargeBlocked(mo);
 	    // blocked move
 	    if (mo->player)
 	    {	// try to slide along it
@@ -425,6 +430,7 @@ P_NightmareRespawn (mobj_t* mobj)
 //
 void P_MobjThinker (mobj_t* mobj)
 {
+    P_TacticsTick(mobj);
     P_FluidTick(mobj);
     // momentum movement
     if (mobj->momx
@@ -557,6 +563,8 @@ int		iquetail;
 
 void P_RemoveMobj (mobj_t* mobj)
 {
+    P_TacticsRemove(mobj);
+    P_AggressiveRemove(mobj);
     P_FluidRemove(mobj);
     if ((mobj->flags & MF_SPECIAL)
 	&& !(mobj->flags & MF_DROPPED)
@@ -912,6 +920,8 @@ P_SpawnMissile
     angle_t	an;
     int		dist;
 
+    mobj_t barrageAim;
+    if(P_TacticsAim(source,&barrageAim)||P_AggressiveBarrageAim(source,&barrageAim))dest=&barrageAim;
     if (R_MuzzleFlash) R_MuzzleFlash(source, wp_plasma, type);
 
     th = P_SpawnMobj (source->x,
@@ -940,6 +950,8 @@ P_SpawnMissile
 	dist = 1;
 
     th->momz = (dest->z - source->z) / dist;
+    P_TacticsFired(source);
+    P_AggressiveMissile(th,source);
     P_CheckMissileSpawn (th);
 	
     return th;
@@ -963,28 +975,24 @@ P_SpawnPlayerMissile
     fixed_t	z;
     fixed_t	slope;
     
-    // see which target is to be aimed at
+    // Free look follows the crosshair, even if classic auto-aim sees a
+    // monster at a different height. Preserve demo/network trajectories.
+    boolean aimed = freeaim && source->player && !demoplayback && !demorecording && !netgame;
+    fixed_t horizontal = FRACUNIT;
     an = source->angle;
-    slope = P_AimLineAttack (source, an, 16*64*FRACUNIT);
-    
-    if (!linetarget)
-    {
-	an += 1<<26;
-	slope = P_AimLineAttack (source, an, 16*64*FRACUNIT);
-
-	if (!linetarget)
-	{
-	    an -= 2<<26;
-	    slope = P_AimLineAttack (source, an, 16*64*FRACUNIT);
-	}
-
-	if (!linetarget)
-	{
-	    an = source->angle;
-	    slope = 0;
-	}
+    if (aimed) {
+        double pitch = fmax(-1.55, fmin(1.55, tourpitch));
+        horizontal = (fixed_t)(cos(pitch)*FRACUNIT);
+        slope = (fixed_t)(sin(pitch)*FRACUNIT);
+    } else {
+        slope = P_AimLineAttack(source, an, 16*64*FRACUNIT);
+        if (!linetarget) {
+            an += 1<<26;
+            slope = P_AimLineAttack(source, an, 16*64*FRACUNIT);
+            if (!linetarget) { an -= 2<<26; slope = P_AimLineAttack(source, an, 16*64*FRACUNIT); }
+            if (!linetarget) { an = source->angle; slope = 0; }
+        }
     }
-		
     x = source->x;
     y = source->y;
     z = source->z + 4*8*FRACUNIT;
@@ -996,9 +1004,9 @@ P_SpawnPlayerMissile
 	S_StartSound (th, th->info->seesound);
 
     th->angle = an;
-    th->momx = FixedMul( th->info->speed,
+    th->momx = FixedMul( FixedMul(th->info->speed,horizontal),
 			 finecosine[an>>ANGLETOFINESHIFT]);
-    th->momy = FixedMul( th->info->speed,
+    th->momy = FixedMul( FixedMul(th->info->speed,horizontal),
 			 finesine[an>>ANGLETOFINESHIFT]);
     th->momz = FixedMul( th->info->speed, slope);
 

@@ -844,6 +844,7 @@ void A_BFGSpray (mobj_t* mo)
 	if (!linetarget)
 	    continue;
 
+	if (R_BFGHit) R_BFGHit(mo,linetarget);
 	P_SpawnMobj (linetarget->x,
 		     linetarget->y,
 		     linetarget->z + (linetarget->height>>2),

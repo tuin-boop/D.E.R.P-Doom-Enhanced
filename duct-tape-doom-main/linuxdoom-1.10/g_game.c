@@ -1269,6 +1269,8 @@ void G_DoLoadGame (void)
 	I_Error ("Bad savegame");
     
     P_LoadNotices(save_p+1,length-(int)(save_p+1-savebuffer));
+    if (length-(int)(save_p+1-savebuffer) >= NOTICE_SAVE_BYTES)
+        P_LoadDoorDamage(save_p+1+NOTICE_SAVE_BYTES, length-(int)(save_p+1+NOTICE_SAVE_BYTES-savebuffer));
     // done 
     Z_Free (savebuffer); 
  
@@ -1309,7 +1311,7 @@ void G_DoSaveGame (void)
 	sprintf (name,SAVEGAMENAME"%d.dsg",savegameslot); 
     description = savedescription; 
 	 
-    size_t capacity = P_SaveGameBufferSize()+NOTICE_SAVE_BYTES;
+    size_t capacity = P_SaveGameBufferSize()+NOTICE_SAVE_BYTES+8+numsectors;
     save_p = savebuffer = calloc(1, capacity);
     if (!savebuffer) I_Error("Could not allocate savegame buffer");
 	 
@@ -1337,6 +1339,7 @@ void G_DoSaveGame (void)
     *save_p++ = 0x1d;		// consistancy marker 
 	 
     save_p += P_SaveNotices(save_p);
+    save_p += P_SaveDoorDamage(save_p);
     length = save_p - savebuffer; 
     if ((size_t)length > capacity)
 	I_Error ("Savegame buffer overrun"); 

@@ -1,0 +1,10 @@
+Impact rework - 2026-10-18
+
+F4 > Effects contains Opening door sparks, Gun impacts and Rocket impacts.
+Door breaching has been withdrawn from gameplay and the menu. Opening sparks remain cosmetic. Legacy save fields are retained for compatibility.
+
+Gun impacts now use tapered sparks, rotating material chips and soft dust, replacing the stock surface-hit puff when enabled.
+Rocket impacts use flame, smoke, sparks and fragments. Particle movement respects solid walls, closed doors, floors and ceilings and can pass through open portals. This is a bounded particle effect, not a fluid simulation.
+Both impact options can be disabled to restore the stock effects. Gameplay damage is unchanged.
+
+Validation: all 24 automated tests passed; native and GPU gameplay/save-load tests passed again after the final changes. Fullscreen impact and Effects-menu captures reviewed.

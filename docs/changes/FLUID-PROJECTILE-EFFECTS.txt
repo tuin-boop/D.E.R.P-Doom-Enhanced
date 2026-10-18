@@ -1,0 +1,11 @@
+FluidWeapons impacts and projectile effects - 2026-10-18
+
+Uses the original FluidWeapons decal definitions: five BulletChip variants for pistol, shotguns, chaingun and chainsaw; Scorch for rockets; purple plasma scorch over a black base; green BFG lightning over the BFG scorch. These are real decal masks, not Doom puff silhouettes. Fists have no weapon decal in the source mod.
+
+Projectile visuals are adapted from FluidWeapons Player.zsc for Doom's rocket, plasma and BFG weapons: rocket smoke/exhaust/sparks and blast smoke; plasma trail, flying particles, rising/falling sparks, electrical arcs and steam; BFG orbiting particles, trail, impact arcs/burst, and hit-target steam/sparks/traces. Original projectile/explosion actors and gameplay damage remain in place. Particles use batched textured quads with additive glow and bounded lifetime/count; they are cosmetic and do not consume gameplay random numbers.
+
+The bundled FluidWeapons toggle controls these marks and projectile effects. The separately selected Stewie Uzi gun impact/puff remains under F4 > Effects > Gun impacts.
+
+Single-player free-look now aims rockets, plasma and BFG projectiles vertically at the crosshair and preserves total projectile speed. Classic demo/network aiming is retained.
+
+Asset provenance and source definitions are in assets/fluid-effects. Common decals referenced by FluidWeapons are inherited from the base engine; their artwork was imported from the local UZDoom package. Particle masks are from the supplied FluidWeapons package.

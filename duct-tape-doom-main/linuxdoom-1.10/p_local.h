@@ -295,6 +295,31 @@ P_DamageMobj
 #include "p_spec.h"
 
 
+/* Optional single-player obstacle navigation. */
+extern int p_persistentpursuit,p_aggressiveai,p_advancedtactics;
+void P_SetAdvancedTactics(int enabled);
+boolean P_TacticsEnabled(void);
+boolean P_TacticsMove(mobj_t *actor);
+boolean P_TacticsHold(mobj_t *actor);
+boolean P_TacticsCanFire(mobj_t *actor);
+boolean P_TacticsAim(mobj_t *actor,mobj_t *aim);
+void P_TacticsTick(mobj_t *actor);
+void P_TacticsFired(mobj_t *actor);
+void P_TacticsRemove(mobj_t *actor);
+boolean P_TacticsAttackBlocked(mobj_t *actor);
+void P_TacticsChargeBlocked(mobj_t *actor);
+angle_t P_TacticsFatSpread(mobj_t *actor);
+void P_SetAggressiveAI(int enabled);
+boolean P_AggressiveEnabled(void);
+int P_AggressiveStateTics(mobj_t *actor,statenum_t state,int tics);
+void P_AggressiveContact(mobj_t *victim,mobj_t *inflictor,mobj_t *source);
+void P_AggressiveDamage(mobj_t *victim,mobj_t *inflictor,mobj_t *source,int damage);
+void P_AggressiveMissile(mobj_t *missile,mobj_t *source);
+void P_AggressiveImpact(mobj_t *missile);
+void P_AggressiveRemove(mobj_t *actor);
+boolean P_AggressiveBarrageAim(mobj_t *actor,mobj_t *aim);
+boolean P_PersistentPursuit(mobj_t *actor);
+
 #endif	// __P_LOCAL__
 //-----------------------------------------------------------------------------
 //

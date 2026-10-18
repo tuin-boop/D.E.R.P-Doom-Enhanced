@@ -229,6 +229,10 @@ static void drawScene(SDL_GPUCommandBuffer *render,SDL_GPURenderPass *pass,const
     SDL_BindGPUGraphicsPipeline(pass,decalPipeline);
     for(const auto &batch:decalBatches) {bindImage(pass,images.at(-1-batch.first).texture,linearClamp);drawVertices(pass,batch.second);}
     SDL_BindGPUGraphicsPipeline(pass,particlePipeline);drawVertices(pass,particleVertices);
+    SDL_BindGPUGraphicsPipeline(pass,decalPipeline);
+    for(const auto &batch:effectBatches) {bindImage(pass,images.at(-1-batch.first).texture,linearClamp);drawVertices(pass,batch.second);}
+    SDL_BindGPUGraphicsPipeline(pass,effectAddPipeline);
+    for(const auto &batch:effectAddBatches) {bindImage(pass,images.at(-1-batch.first).texture,linearClamp);drawVertices(pass,batch.second);}
     // Window glass over everything behind it, shards included; it writes no depth.
     if(!glassVertices.empty()) {
         SDL_BindGPUGraphicsPipeline(pass,glassPipeline);

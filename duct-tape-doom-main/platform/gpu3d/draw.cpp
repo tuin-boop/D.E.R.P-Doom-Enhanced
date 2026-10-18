@@ -26,7 +26,7 @@ void uploadFrame(SDL_GPUCommandBuffer *command,const std::vector<const std::vect
         vertexOffsets[&vertices]=bytes;
         bytes=(bytes+(Uint32)(vertices.size()*sizeof(Vertex))+255)&~Uint32(255);
     };
-    for(const auto *groups:{&batches,&shadowBatches,&decalBatches,&mirrorBatches})for(const auto &batch:*groups)place(batch.second);
+    for(const auto *groups:{&batches,&shadowBatches,&decalBatches,&effectBatches,&effectAddBatches,&mirrorBatches})for(const auto &batch:*groups)place(batch.second);
     place(mistVertices);place(shaftVertices);place(particleVertices);place(heatVertices);place(skyVertices);place(glassVertices);
     for(const auto *vertices:transient)place(*vertices);
     Uint32 blockerBytes=(Uint32)(lightWords.size()*sizeof(lightWords[0]));

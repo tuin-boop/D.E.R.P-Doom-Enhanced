@@ -4,6 +4,7 @@
 #include "frame_workers.h"
 
 namespace doom3d {
+bool customGunPuff(const mobj_t *puff);
 void quad(std::vector<Vertex> &out,Vertex a,Vertex b,Vertex c,Vertex d) {
     out.insert(out.end(),{a,b,c,a,c,d});
 }
@@ -326,6 +327,7 @@ static void addThing(mobj_t *thing,int i,const Uniforms &camera,float fraction,c
                      const MirrorView *mirror,const ThingLighting &lit) {
     bool self=thing==players[displayplayer].mo;
     if((self&&!mirror)||thing->sprite<0||thing->sprite>=numsprites) return;
+    if(customGunPuff(thing))return;
     const auto &sprite=sprites[thing->sprite]; int frame=thing->frame&FF_FRAMEMASK;
     if(frame>=sprite.numframes) return;
     const auto &sf=sprite.spriteframes[frame];

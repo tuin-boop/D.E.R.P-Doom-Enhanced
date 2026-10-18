@@ -407,6 +407,15 @@ void buildBlood(const Uniforms &camera);
 // liquids.cpp
 void splashesShutdown();
 boolean planeImpact(sector_t *sector,boolean ceiling,fixed_t fx,fixed_t fy,fixed_t fz);
+void tickImpactParticles();
+void fluidProjectileFlight(const mobj_t &thing);
+void fluidProjectileImpact(mobj_t *thing);
+void tickFluidEffects();
+void fluidBulletFlat(int sector,bool ceiling,float x,float y);
+void fluidBFGHit(mobj_t *ball,mobj_t *victim);
+void flatImpactParticles(float x,float y,float z,bool ceiling,Image &image,float light);
+void doorMotion(sector_t *sector);
+void doorDamage(line_t *line,int side,fixed_t x,fixed_t y,fixed_t z,int broken);
 void watchSplashes();
 void buildRings(Uniforms &camera);
 float liquidLight(int sector,Image &flat,float x,float y,float z,const Uniforms &camera);

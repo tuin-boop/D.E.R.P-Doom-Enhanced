@@ -1,0 +1,31 @@
+Advanced tactics (optional)
+
+F4 > Monster AI > Navigation > Advanced tactics. Default Off.
+Independent of Aggressive AI and Persistent pursuit; applies immediately.
+
+Shared: nearby allies give each other space and try different directions.
+Imps: sidestep after fireballs.
+Demons/spectres: approach from different diagonal angles and separate in crowds.
+Cacodemons: drift sideways after shots and vary height with floor/ceiling clearance.
+Hell knights: take short advancing steps after launching attacks.
+Barons: hold nearby chokepoints and occasionally chain a three-shot barrage.
+Revenants: back away at medium-close range while preserving close melee.
+Arachnotrons: sustain bursts, then strafe; seek a new angle when their firing lane is blocked.
+Mancubi: alternate focused fixed-position volleys and wider spreading volleys.
+Arch-viles: approach visible nearby corpses that fit when raised; probe nearby cover and expose themselves again to attack.
+Pain elementals: keep distance and try to find room in front before spawning souls.
+Cyberdemons: occasionally lead a moving target, capped to a modest 96-unit offset.
+Spider masterminds: sustained suppression bursts, briefly aimed at the last visible position, then reposition.
+
+These are local tactics, not guaranteed perfect navigation. All actual steps
+use the existing collision checks. Nearby searches and cover probes are capped,
+and decisions are staggered. No damage, projectile speed, graphics, demo or
+network behavior changes when the option is off. Existing saves remain usable.
+
+Validation: 24-test suite plus targeted native/GPU checks; bounded prediction,
+fixed/wide volleys, aerial clearance and off/demo guards. All three AI options
+were exercised together in the user's AITEST E1M5 save: the imp found its way
+around the obstacle and attacked. The isolated monster simulation measured
+0.009 ms average and 0.339 ms maximum per tic in that scene (not whole-frame FPS).
+
+Lost soul recovery: advanced tactics now includes lost souls (which do not count toward kills). Blocked charges against scenery or other actors trigger a two-second repositioning period, respected by Aggressive AI. Enabling Advanced tactics displays a warning about difficulty, especially for pistol starts.

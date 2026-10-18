@@ -65,6 +65,7 @@ slidename_t	slideFrameNames[MAXSLIDEDOORS] =
 void T_VerticalDoor (vldoor_t* door)
 {
     result_e	res;
+    fixed_t oldheight = door->sector->ceilingheight;
 	
     switch(door->direction)
     {
@@ -123,6 +124,7 @@ void T_VerticalDoor (vldoor_t* door)
 			  door->speed,
 			  door->sector->floorheight,
 			  false,1,door->direction);
+
 	if (res == pastdest)
 	{
 	    switch(door->type)
@@ -173,6 +175,8 @@ void T_VerticalDoor (vldoor_t* door)
 			  door->speed,
 			  door->topheight,
 			  false,1,door->direction);
+    if (R_DoorMotion && door->sector->ceilingheight > oldheight)
+        R_DoorMotion(door->sector);
 	
 	if (res == pastdest)
 	{
@@ -414,6 +418,7 @@ EV_VerticalDoor
     // if the sector has an active thinker, use it
     sec = sides[ line->sidenum[side^1]] .sector;
     secnum = sec-sectors;
+    if (sec->rocketdoorhits >= 3) return;
 
     if (sec->specialdata)
     {
@@ -764,3 +769,74 @@ EV_SlidingDoor
     }
 }
 #endif
+
+/* Deliberately conservative prototype: a door must have a manual opener,
+   no sector tag, and no other boundary action. Never consume Doom's RNG. */
+int p_destructibledoors = 0;
+void P_RocketDoorImpact(mobj_t *rocket, line_t *line)
+{
+    sector_t *sec, *front;
+    vldoor_t *door;
+    fixed_t top;
+    int side, i, manual = 0;
+    if (!p_destructibledoors || demoplayback || demorecording || netgame ||
+        !rocket || rocket->type != MT_ROCKET || !rocket->target ||
+        !rocket->target->player || !line || !line->frontsector || !line->backsector)
+        return;
+    side = P_PointOnLineSide(rocket->x, rocket->y, line);
+    sec = side ? line->frontsector : line->backsector;
+    front = side ? line->backsector : line->frontsector;
+    if (sec->tag || sec->special || sec->rocketdoorhits >= 3 ||
+        sec->ceilingheight >= front->ceilingheight ||
+        rocket->z + rocket->height <= sec->ceilingheight) return;
+    for (i = 0; i < sec->linecount; ++i)
+    {
+        line_t *edge = sec->lines[i];
+        if (!edge->special) continue;
+        if (edge->special != 1 && edge->special != 31 &&
+            edge->special != 117 && edge->special != 118) return;
+        if (edge->backsector == sec) manual = 1;
+    }
+    if (!manual) return;
+    door = (vldoor_t *)sec->specialdata;
+    if (door && door->thinker.function.acp1 != (actionf_p1)T_VerticalDoor) return;
+    top = P_FindLowestCeilingSurrounding(sec) - 4*FRACUNIT;
+    if (top <= sec->floorheight) return;
+    ++sec->rocketdoorhits;
+    if (R_DoorDamage) R_DoorDamage(line,side,rocket->x,rocket->y,
+                                  rocket->z+rocket->height/2,sec->rocketdoorhits == 3);
+    if (sec->rocketdoorhits < 3) return;
+    if (!door)
+    {
+        door = Z_Malloc(sizeof(*door), PU_LEVSPEC, 0);
+        sec->specialdata = door;
+        door->sector = sec;
+        P_AddThinker(&door->thinker);
+        door->thinker.function.acp1 = (actionf_p1)T_VerticalDoor;
+    }
+    door->type = open;
+    door->direction = 1;
+    door->speed = 32*FRACUNIT;
+    door->topheight = top;
+    door->topwait = VDOORWAIT;
+    door->topcountdown = 0;
+}
+
+/* Append-only save extension; old saves leave the zero-initialized health alone. */
+int P_SaveDoorDamage(unsigned char *data)
+{
+    int i;
+    data[0]='D';data[1]='O';data[2]='R';data[3]=1;
+    for(i=0;i<4;++i)data[4+i]=(unsigned int)numsectors>>(8*i);
+    for(i=0;i<numsectors;++i)data[8+i]=sectors[i].rocketdoorhits;
+    return 8+numsectors;
+}
+void P_LoadDoorDamage(const unsigned char *data, int length)
+{
+    unsigned int count=0;int i;
+    if(length<8 || data[0]!='D' || data[1]!='O' || data[2]!='R' || data[3]!=1)return;
+    for(i=0;i<4;++i)count|=(unsigned int)data[4+i]<<(8*i);
+    if(count!=(unsigned int)numsectors || length-8<numsectors)return;
+    for(i=0;i<numsectors;++i)if(data[8+i]>3)return;
+    for(i=0;i<numsectors;++i)sectors[i].rocketdoorhits=data[8+i];
+}

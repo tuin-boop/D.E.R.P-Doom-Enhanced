@@ -1,0 +1,27 @@
+Aggressive AI (optional)
+
+F4 > Monster AI > Navigation > Aggressive AI.
+Default: Off. Independent of Persistent pursuit; applies immediately.
+
+Alerted monsters attack whenever they have a clear firing line instead of
+waiting for the usual random attack chance. Their existing attacks, damage,
+projectile speeds and collision rules remain intact.
+
+Pistol enemies use the player's 14-tic pistol cycle (10 with Fluid fast pistol).
+Shotgun enemies use the player's 37-tic pump cycle.
+Hitscan misses and missed projectile impacts request a short repositioning
+burst. Successful hits permit continued firing, with occasional short strafes.
+Demons and spectres occasionally approach diagonally to try to flank.
+Heavy hits (40+ damage) briefly stagger surviving monsters.
+Every third eligible mancubus attack sequence starts a short barrage aimed at
+a fixed last-known position. It can continue after the player leaves that spot,
+but expires after 160 tics and respects death/notarget.
+
+Original AI remains available with the toggle off. Demos and network games
+keep original behavior. No save format changes; transient tactics rebuild on
+load. Actor and projectile tracking are bounded.
+
+Validation includes live pistol/shotgun cadence, projectile hit/miss feedback,
+heavy-hit stagger, fixed-position barrage/expiry, live toggles and demo guards.
+
+Enabling Aggressive AI displays a difficulty warning: it can make the game hard, and very hard with pistol starts. The same warning applies to Advanced tactics.

@@ -28,6 +28,7 @@ static const char
 rcsid[] = "$Id: p_enemy.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "m_random.h"
 #include "i_system.h"
@@ -195,6 +196,8 @@ boolean P_CheckMeleeRange (mobj_t*	actor)
     return true;		
 }
 
+#include "p_aggressive.inc"
+
 //
 // P_CheckMissileRange
 //
@@ -202,6 +205,9 @@ boolean P_CheckMissileRange (mobj_t* actor)
 {
     fixed_t	dist;
 	
+    if(P_TacticsAttackBlocked(actor))return false;
+    if(P_TacticsCanFire(actor))return true;
+    if(P_AggressiveEnabled())return P_AggressiveCanFire(actor);
     if (! P_CheckSight (actor, actor->target) )
 	return false;
 	
@@ -376,6 +382,9 @@ boolean P_TryWalk (mobj_t* actor)
 
 
 
+
+#include "p_pursuit.inc"
+#include "p_tactics.inc"
 
 void P_NewChaseDir (mobj_t*	actor)
 {
@@ -737,8 +746,11 @@ void A_Chase (mobj_t*	actor)
 	return;
     }
     
+    if(P_TacticsMove(actor))return;
+    if(P_AggressiveManeuver(actor))return;
+
     // do not attack twice in a row
-    if (actor->flags & MF_JUSTATTACKED)
+    if ((actor->flags & MF_JUSTATTACKED) && !P_AggressiveEnabled() && !P_TacticsCanFire(actor))
     {
 	actor->flags &= ~MF_JUSTATTACKED;
 	if (gameskill != sk_nightmare && !fastparm)
@@ -760,7 +772,7 @@ void A_Chase (mobj_t*	actor)
     // check for missile attack
     if (actor->info->missilestate)
     {
-	if (gameskill < sk_nightmare
+	if (!P_AggressiveEnabled() && !P_TacticsCanFire(actor) && gameskill < sk_nightmare
 	    && !fastparm && actor->movecount)
 	{
 	    goto nomissile;
@@ -769,6 +781,7 @@ void A_Chase (mobj_t*	actor)
 	if (!P_CheckMissileRange (actor))
 	    goto nomissile;
 	
+	P_AggressiveStartAttack(actor);
 	P_SetMobjState (actor, actor->info->missilestate);
 	actor->flags |= MF_JUSTATTACKED;
 	return;
@@ -786,8 +799,8 @@ void A_Chase (mobj_t*	actor)
     }
     
     // chase towards player
-    if (--actor->movecount<0
-	|| !P_Move (actor))
+    if (!P_TacticsHold(actor) && !P_PersistentPursuit(actor) && (--actor->movecount<0
+	|| !P_Move (actor)))
     {
 	P_NewChaseDir (actor);
     }
@@ -809,6 +822,8 @@ void A_FaceTarget (mobj_t* actor)
     if (!actor->target)
 	return;
     
+    mobj_t aim;
+    if(P_TacticsAim(actor,&aim)||P_AggressiveBarrageAim(actor,&aim)){actor->angle=R_PointToAngle2(actor->x,actor->y,aim.x,aim.y);return;}
     actor->flags &= ~MF_AMBUSH;
 	
     actor->angle = R_PointToAngle2 (actor->x,
@@ -833,15 +848,19 @@ void A_PosAttack (mobj_t* actor)
     if (!actor->target)
 	return;
 		
+    P_AggressiveShotBegin(actor);
     A_FaceTarget (actor);
     if (R_MuzzleFlash) R_MuzzleFlash(actor, wp_pistol, -1);
     angle = actor->angle;
     slope = P_AimLineAttack (actor, angle, MISSILERANGE);
+    slope = P_TacticsHitscanSlope(actor,slope);
 
     S_StartSound (actor, sfx_pistol);
     angle += (P_Random()-P_Random())<<20;
     damage = ((P_Random()%5)+1)*3;
     P_LineAttack (actor, angle, MISSILERANGE, slope, damage);
+    P_AggressiveShotEnd(actor);
+    P_TacticsFired(actor);
 }
 
 void A_SPosAttack (mobj_t* actor)
@@ -856,10 +875,12 @@ void A_SPosAttack (mobj_t* actor)
 	return;
 
     S_StartSound (actor, sfx_shotgn);
+    P_AggressiveShotBegin(actor);
     A_FaceTarget (actor);
     if (R_MuzzleFlash) R_MuzzleFlash(actor, wp_shotgun, -1);
     bangle = actor->angle;
     slope = P_AimLineAttack (actor, bangle, MISSILERANGE);
+    slope = P_TacticsHitscanSlope(actor,slope);
 
     for (i=0 ; i<3 ; i++)
     {
@@ -867,6 +888,8 @@ void A_SPosAttack (mobj_t* actor)
 	damage = ((P_Random()%5)+1)*3;
 	P_LineAttack (actor, angle, MISSILERANGE, slope, damage);
     }
+    P_AggressiveShotEnd(actor);
+    P_TacticsFired(actor);
 }
 
 void A_CPosAttack (mobj_t* actor)
@@ -880,18 +903,30 @@ void A_CPosAttack (mobj_t* actor)
 	return;
 
     S_StartSound (actor, sfx_shotgn);
+    P_AggressiveShotBegin(actor);
     A_FaceTarget (actor);
     if (R_MuzzleFlash) R_MuzzleFlash(actor, wp_chaingun, -1);
     bangle = actor->angle;
     slope = P_AimLineAttack (actor, bangle, MISSILERANGE);
+    slope = P_TacticsHitscanSlope(actor,slope);
 
     angle = bangle + ((P_Random()-P_Random())<<20);
     damage = ((P_Random()%5)+1)*3;
     P_LineAttack (actor, angle, MISSILERANGE, slope, damage);
+    P_AggressiveShotEnd(actor);
+    P_TacticsFired(actor);
 }
 
 void A_CPosRefire (mobj_t* actor)
 {	
+    if(P_TacticsEnabled()&&(actor->type==MT_SPIDER||actor->type==MT_BABY)){
+        if(!P_TacticsCanFire(actor))P_SetMobjState(actor,actor->info->seestate);
+        return;
+    }
+    if(P_AggressiveEnabled()){
+        if(!P_AggressiveCanFire(actor))P_SetMobjState(actor,actor->info->seestate);
+        return;
+    }
     // keep firing unless target got out of sight
     A_FaceTarget (actor);
 
@@ -910,6 +945,14 @@ void A_CPosRefire (mobj_t* actor)
 void A_SpidRefire (mobj_t* actor)
 {	
     // keep firing unless target got out of sight
+    if(P_TacticsEnabled()&&(actor->type==MT_SPIDER||actor->type==MT_BABY)){
+        if(!P_TacticsCanFire(actor))P_SetMobjState(actor,actor->info->seestate);
+        return;
+    }
+    if(P_AggressiveEnabled()){
+        if(!P_AggressiveCanFire(actor))P_SetMobjState(actor,actor->info->seestate);
+        return;
+    }
     A_FaceTarget (actor);
 
     if (P_Random () < 10)
@@ -1374,7 +1417,7 @@ void A_VileAttack (mobj_t* actor)
 // in three different directions?
 // Doesn't look like it. 
 //
-#define	FATSPREAD	(ANG90/8)
+#define FATSPREAD (P_TacticsFatSpread(actor))
 
 void A_FatRaise (mobj_t *actor)
 {
@@ -1453,6 +1496,7 @@ void A_SkullAttack (mobj_t* actor)
     if (!actor->target)
 	return;
 		
+    if(P_TacticsAttackBlocked(actor)){P_SetMobjState(actor,actor->info->seestate);return;}
     dest = actor->target;	
     actor->flags |= MF_SKULLFLY;
 
@@ -1543,6 +1587,7 @@ void A_PainAttack (mobj_t* actor)
 	return;
 
     A_FaceTarget (actor);
+    if(P_TacticsEnabled()&&P_TacticsMove(actor)){P_SetMobjState(actor,actor->info->seestate);return;}
     A_PainShootSkull (actor, actor->angle);
 }
 
