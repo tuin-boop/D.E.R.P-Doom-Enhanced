@@ -1,0 +1,5 @@
+LIQUID LIGHT AND DISTANT WATER
+Adapted two focused ideas from DERP 0.5.0 (Robert Heidenreich): limit pool-area lighting on vertical walls to half the source strength, and reduce distant animated-liquid contrast/pulsing toward its animation-cycle average. Existing reflection bounds, distance damping, lighting overload controls and multicore baking remain.
+The water implementation caches averages for every animation cycle per level and adds no texture lookups, particles or procedural noise. Nearby artwork is unchanged; distant texture detail retains 35% contrast, blended gradually with distance and grazing angle.
+24/24 automated tests passed, including wall illumination cap and unchanged horizontal illumination. Matched fullscreen E1M1 checks at 2560x1440 reported 1.4 ms median before and after; these are controlled views, not a gameplay FPS guarantee.
+Tech Gone Bad could not be retested because the earlier e1m8b.wad path is missing. The available SIGIL II episode is outside the existing performance harness map enumeration; no SIGIL performance claim is made.

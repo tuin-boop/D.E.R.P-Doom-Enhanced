@@ -1,0 +1,50 @@
+FRAME-TIME SPIKE UPDATE - 16 October 2026
+
+Launch DuctTapeDoom-smooth.exe (or the updated DuctTapeDoom.exe).
+Renderer, resolution, graphics settings and visual effects are unchanged.
+
+CHANGES
+1. Optional -profilespikes tracing records slow-frame time spent outside the
+   renderer, acquiring the swapchain, preparing the scene, uploading, drawing
+   and submitting. Geometry timing separates wall/floor work, surface lights,
+   actors and effects. No GPU fences are added; diagnostics are off normally.
+2. Exact shadow-slice packing is reused when position/radius/cone and the
+   complete ordered blocker geometry match. Strength and flicker remain live.
+   Changed blockers/light shapes rebuild. The existing -verifylightthreads
+   mode forces full recomputation and compares packed output bit-for-bit.
+3. Blocker cache capacity now evicts only the least recently used entry,
+   retaining its allocation. Previously moving projectiles could fill the
+   cache and flush ALL stationary lights as well. Sector geometry changes
+   still invalidate it. -verifylightcache compares with fresh wall scans.
+4. Reuse actor-light jobs, caster lists, sky-height and reflection scratch.
+   Merge visibility spans in place and reuse shadow polygon clipping buffers,
+   retaining the original calculations and ordering. Four-point footprints
+   now live on the stack. Light-mask job storage also retains capacity.
+
+TEST METHOD
+Tech Gone Bad e1m8b.wad at 2560x1440, existing full graphics settings,
+Fluid Weapons 1.0-UZ + sound addon + FluidMonsters, UZ movement/interpolation.
+Core i7-14700F / RTX 5070. Active monsters and held plasma fire in the same
+previously slow view. Normal GPU pipelining and tear-free mailbox presentation;
+no per-frame GPU fences. Audio uses the test driver's silent output backend.
+This is a repeatable stationary combat test, not a complete playthrough.
+
+RESULTS (same-session 60-second comparison)
+Previous build: 126.3 FPS, p99 14.50 ms, worst 24.83 ms;
+54 of 7581 frames exceeded 16.67 ms (0.71%).
+Updated build: 136.7 FPS, p99 13.52 ms, worst 22.20 ms;
+39 of 8203 frames exceeded 16.67 ms (0.48%).
+An additional updated-build run: 138.0 FPS, p99 13.02 ms, worst 23.49 ms;
+42 of 8283 frames exceeded 16.67 ms (0.51%).
+
+The paired run has approximately 28% fewer over-budget frames and 8% higher
+average FPS. Spikes remain; this is not a guaranteed 60 FPS minimum. Results
+vary with background activity. The earlier 30-second intermediate cache-only
+build did not consistently reduce spike counts; the final build also includes
+the bounded LRU blocker cache. Performance runs have no verification enabled.
+
+A 152-view Tech Gone Bad sweep passed exact thread/cache recomputation checks.
+Moving-door traversal passed with all cache/thread verification flags.
+Fluid Weapons/SFX, FluidMonsters, UZ movement, firing, save/load and level
+change passed with thread/surface verification. All 23 CTest checks passed.
+Packaged engine SHA-256 matches the tested Release engine; Defender scan clean.

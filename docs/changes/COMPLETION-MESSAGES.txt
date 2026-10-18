@@ -1,0 +1,20 @@
+Completion messages - 2026-10-16
+
+Animated notices match the existing keycard presentation and original Doom font:
+ALL ENEMIES KILLED / AREA SECURED (red)
+ALL SECRETS FOUND / NOTHING LEFT HIDDEN (violet)
+ALL ITEMS COLLECTED / EVERY PICKUP COUNTS (green)
+100% COMPLETE / ALL KILLS / SECRETS / ITEMS (gold)
+
+Uses Doom's kill, secret and item statistics. Items means pickups counted in
+Doom's end-level item statistic. Empty categories do not trigger messages.
+Each award is shown once per level; already-completed awards are not replayed
+when loading a save. Empty categories count toward overall completion, but an
+entirely empty map never triggers a completion award.
+
+Keys and milestones share a five-row stack, with overflow queued. Entrance,
+accent sweep and fade follow game time. No changes to gameplay or level exits.
+
+Validation: all 24 CTest checks passed. A fullscreen 2560x1440 render fixture
+triggered all four awards plus a blue key together; screenshot inspected for
+readability, separate rows, and HUD clearance. Final spacing checked fullscreen.

@@ -1,0 +1,3 @@
+WIDESCREEN HUD AND LAUNCHER
+The modern HUD docks health/armor to the left and ammo/keys/statistics to the right edge of widescreen displays. Fonts, icons, menus, weapon wheel and notifications retain their proportions. The centered HUD layout remains centered.
+Launcher: supplied screenshot embedded in the header, dark green palette, clearer button styling and highlighted Play Doom button. Existing launch options and saved mod order are preserved.

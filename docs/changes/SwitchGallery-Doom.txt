@@ -1,0 +1,7 @@
+SWITCH GALLERY: 58 alcoves, both states of every SW1/SW2 texture in DOOM.WAD.
+Start a new game at E1M1. Walk forward into each alcove and press Use at its back panel.
+Buttons change state for one second, then reset. Adjacent alcoves show the paired starting states.
+Eight alcoves per row, connected by open corridors. No monsters, hazards or moving doors.
+Neutral walls and dim fixed lighting make the switch glow easier to compare.
+The CSV lists panel names and entrance coordinates; the engine displays the room label.
+Textures without lamps intentionally remain unlit. No IWAD artwork is included.

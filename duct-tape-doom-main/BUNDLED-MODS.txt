@@ -1,0 +1,7 @@
+BUNDLED MODS
+FluidWeapons 1.0-UZ, FluidWeapons SFX add-on and FluidMonsters are embedded in this launcher. No external copies are required. Existing matching packs in the add-on list are skipped; other WADs and PK3s remain as before.
+In game: F4 > Bundled mods. Toggle FluidWeapons, FluidWeapons SFX add-on and FluidMonsters independently. Close the options panel to apply. Choices persist in graphics.cfg; all three default to enabled. No level restart required.
+Weapon off restores stock weapon presentation and firing behavior. SFX off restores main-pack sounds when FluidWeapons is on; with both off, stock weapon sounds are used. Monster off restores vanilla stepping. Demo/netgame restrictions remain. The embedded FluidMonsters archive is preserved, while the engine uses its existing native adaptation rather than executing ZScript.
+Bundled original archives and their credits are preserved. Main weapons/SFX: MR's FluidWeapons packs supplied by the user. FluidMonsters: supplied FluidMonsters package. Original notices/license files remain inside each archive.
+Verification: 24/24 automated tests; extracted embedded-pack gameplay/save/load; all eight live toggle combinations and base/add-on sound decode; embedded hashes and duplicate filtering; packaged-engine fullscreen render with all mods disabled and persisted settings.
+Also includes LIQUID-CALM.txt changes. Fullscreen E1M1 median 1.4 ms before/after; E1M3 median 1.8 ms before/after (95th 1.9/2.0 ms). Controlled static views, not a gameplay FPS guarantee.

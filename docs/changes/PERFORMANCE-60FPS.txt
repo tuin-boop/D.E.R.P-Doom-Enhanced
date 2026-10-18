@@ -1,0 +1,53 @@
+TECH GONE BAD PERFORMANCE UPDATE - 16 October 2026
+
+Launch DuctTapeDoom-fast.exe (or the updated DuctTapeDoom.exe).
+F4 > Display > View > Show FPS and frame time enables the in-game counter.
+
+Graphics and the Duct Tape Doom renderer are retained. No lights, shadows,
+reflections, texture detail, resolution or quality settings were reduced.
+
+CHANGES
+- Cache the exact integrated emission of clipped wall textures instead of
+  scanning every pixel again each frame. Texture/clip changes recompute it.
+- Reuse unchanged merged surface lights; flicker remains live, with the same
+  floating-point accumulation order as the original calculations.
+- Cache exact static sprite light samples in bounded, private worker caches.
+  Door movement, light rebuilding and lamp damage invalidate the samples.
+  Bounce, flicker and sector light changes still update every frame.
+- Hash lookups speed surface-light selection without changing ranking/order.
+- Up to eight CPU threads perform frame-lighting work.
+- Use tear-free mailbox presentation where the GPU supports it, with vsync
+  fallback. This avoids queuing stale frames behind missed refreshes.
+
+MEASUREMENTS ON THIS PC
+Core i7-14700F / RTX 5070, 2560x1440 window, current user graphics settings.
+Tech Gone Bad e1m8b.wad, Fluid Weapons 1.0-UZ, SFX add-on, FluidMonsters,
+UZ movement and weapon interpolation enabled. Benchmark audio uses SDL's
+silent test driver; the sound addon remains loaded.
+
+Full-map sweep: 89 positions / 356 views; median CPU/GPU bottleneck 5.5 ms,
+worst confirmed view 6.5 ms, no sampled view over 16.7 ms. Map load 8.8 s.
+These are GPU-fenced diagnostic measurements, not actual displayed FPS.
+
+Normal rendering, active monsters and held plasma fire at the slow view:
+30 seconds: 125.8 FPS average, p95 10.15 ms, p99 10.88 ms, max 24.21 ms;
+18 of 3778 frame intervals exceeded 16.67 ms.
+60-second repeat: 118.3 FPS average, p95 11.04 ms, p99 18.77 ms, max 29.86 ms;
+101 of 7099 frame intervals exceeded 16.67 ms (1.42%). 707 cells fired.
+The latest build is substantially faster, but is NOT a guaranteed 60 FPS
+minimum: brief spikes remain. Background work, scene changes and hardware
+can change results. These combat tests hold one view, not a whole playthrough.
+
+VALIDATION
+A full 152-view sweep recomputed cached wall emission, merged lights, static
+sprite samples, threaded lighting and shadow results against the original
+calculations, with no differences. Verification deliberately duplicates work
+and must not be used to benchmark performance. Moving-door traversal passed
+with all verification flags; broken-screen/flicker regression also passed.
+Fluid Weapons/SFX and FluidMonsters gameplay, UZ movement, firing, save/load
+and level change passed with thread and surface-cache verification.
+
+Developer flags: -verifysurfacecache, -verifylightthreads, -verifylightcache;
+-singlethreadlights for serial lighting, -fifo-present for FIFO presentation.
+The performance tester now supports -combat-seconds 1..120 and
+-combat-realtime to measure actual intervals without per-frame GPU fences.

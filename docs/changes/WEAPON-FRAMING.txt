@@ -1,0 +1,11 @@
+Weapon framing and motion - 2026-10-16
+
+Fixed the 4:3 clip-space boundary cutting off reload hands on widescreen.
+Weapon scale and center stay the same; bloom occlusion uses the same widened viewport.
+Fist attacks now use both D/E punch sprites, with the source mirror/flip flags.
+Turning selects the punching hand; strafing selects the opposite hand; standing still alternates.
+Restored the full reference sway offset by easing from the prior displayed position.
+
+Validation: all 23 CTest checks passed. Fullscreen 2560x1440 SSG reload and fist
+runtime checks passed, including fidgets, subsequent firing, ammo, save/load and map changes.
+Original rendering settings were retained. Screenshots inspected for reload and fist poses.

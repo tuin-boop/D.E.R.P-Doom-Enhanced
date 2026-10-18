@@ -1,0 +1,23 @@
+SWITCH LIGHTS AND NOTARGET
+Type notarget during single-player gameplay to toggle player detection off/on.
+The existing F5 No target toggle controls the same setting. This is not god mode;
+projectiles already in flight and environmental damage can still hurt you.
+
+Standard SW1/SW2 paired textures: saturated red/green pixels that become brighter
+than the companion state now emit localized colored light. Shared housing stays
+unlit. The light follows the current texture without rebaking or retaining the
+old color, including bake-only mode. External emissive masks still take priority.
+At most eight nearby switch lights are active, with wall occlusion and distance fade.
+Custom switch names and blue/yellow indicators are not automatically covered.
+
+Validation: all 23 CTest checks passed. Typed notarget ON/OFF and P_Unseen were
+checked at runtime. Red, green, and post-bake switched states were inspected in
+a generated SW1COMM/SW2COMM fixture at 2560x1440 fullscreen. The post-bake check
+also used bake-only lighting. This is a focused fixture, not every mod/map.
+Windows Defender found no threats; embedded engine hash verified.
+
+SwitchGallery-Doom.wad: 58 displays at E1M1. SwitchGallery-Doom2.wad: 80 at MAP01.
+Both states of every stock switch, in paired alcoves. All buttons verified to change
+and reset after one second. Ultimate Doom now registers its episode 2/3 switches.
+Load the matching gallery WAD instead of other map WADs; start a new game.
+

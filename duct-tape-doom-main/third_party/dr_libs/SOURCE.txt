@@ -1,0 +1,3 @@
+Source: https://github.com/mackron/dr_libs
+Commit: dfe8377631000664666519fdb83da193fd8037f4
+Only dr_mp3.h is used; streaming memory decode of local music lumps.

@@ -1,0 +1,49 @@
+MULTICORE LIGHTING AND FRAME-RATE COUNTER - 16 October 2026
+
+Launch DuctTapeDoom-multicore.exe. Per-frame sprite light sampling, surface
+light masks, and shadow-slice packing use a persistent pool: up to three
+workers plus the render thread. Small jobs run serially. Workers finish
+before rendering or game state advances. Geometry emission, image loading,
+gameplay and GPU calls remain on the main thread. Loading-time light baking
+already used multiple cores and is not changed by this update.
+
+F4 > Display > View > Show FPS and frame time toggles an in-game counter,
+including fullscreen. It shows FPS, average milliseconds per frame, and the
+maximum measured frame interval in the last reporting period, including stalls.
+The counter uses Doom lettering and remains independent of modern HUD scale.
+60 FPS needs approximately 16.7 ms per frame; 120 FPS needs 8.3 ms.
+
+TESTED ON THIS COMPUTER
+Intel Core i7-14700F, RTX 5070, 1280x800 window, user's graphics settings with
+fullscreen disabled. Tech Gone Bad e1m8b.wad, 38 positions / 152 views.
+Fluid Weapons 1.0-UZ, SFX add-on, FluidMonsters and UZ movement enabled using
+the launcher's native compatibility arguments. Renderer, lights, shadows,
+textures, resolution and quality options retained.
+
+                                      Median CPU/frame   Worst sampled view
+Previous build                         23.0 ms            27.2 ms
+New build, single-thread comparison     22.9 ms            28.0 ms
+New build, threaded, run 1              16.6 ms            19.3 ms
+New build, threaded, repeat             15.2 ms            17.1 ms
+
+The median CPU cost fell about 28-34%. These are sampled, GPU-fenced frame
+measurements, not a guaranteed FPS during combat. Some views still exceed
+16.7 ms. Loading was roughly 8-10 seconds; this change targets frame work,
+not a further bake-loading speedup. CPU clocks/background activity affect
+results. Higher resolutions can have a different GPU bottleneck.
+
+VALIDATION
+23/23 CTest checks passed, including a new persistent-worker test covering
+exactly-once work, synchronization, exception handling, reuse and shutdown.
+A complete 152-view map sweep compared threaded sprite light values, shadow
+lists, surface light masks and packed GPU shadow data against serial results
+within each frame. No differences were found. Moving doors/traversal also
+passed with thread and blocker-cache verification. Fluid Weapons/SFX and
+FluidMonsters gameplay, UZ movement, firing, save/load and level change passed
+with thread verification. One extra run with both expensive verification
+modes triggered the movement fixture's coasting assertion; the serial control
+and thread-verification run passed. No movement implementation was changed.
+
+Developer diagnostics: -singlethreadlights disables per-frame workers;
+-verifylightthreads recomputes outputs serially and checks exact equality.
+Do not benchmark with verification enabled: it intentionally duplicates work.

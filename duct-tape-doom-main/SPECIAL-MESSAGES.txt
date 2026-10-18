@@ -1,0 +1,6 @@
+SPECIAL MESSAGES, PICKUP LIGHTS AND HUD COUNTERS
+Three text variants for boss kills, secrets, major powerups, first weapon discoveries, completion milestones and combat achievements. Simultaneous messages stack; bosses have queue priority. Weapon discoveries persist through saves and reset for a new game.
+Combat achievements: survive below 10 health and leave immediate danger for five seconds; three kills in one attack; three barrel-blast kills; kill a tough monster with fists; complete all level totals without taking damage. Repeatable combat events have 20-second cooldowns. Combat achievements can be disabled in the graphics/settings panel. Secret exits also have messages.
+Green/blue armor and major powerups now cast localized colored light; nearby powerup lights are moderated to avoid excessive tint. Keys retain their existing lighting.
+Kills, Secrets and Items show current/total in the top-right HUD, with completed nonempty categories colored green.
+Validation: gameplay/save-load, variants, event triggers and cooldown tests; fullscreen pickup/message and level-exit previews. Current fullscreen test exited successfully. The reported shutdown crash in an older build has not been reproduced or diagnosed.

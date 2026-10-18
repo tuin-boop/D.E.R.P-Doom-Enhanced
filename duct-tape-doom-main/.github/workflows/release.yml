@@ -1,0 +1,180 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 builds playable downloads for macOS, Windows and
+# Linux and publishes them as a GitHub pre-release. Running the workflow by hand
+# builds the same downloads as workflow artifacts without publishing anything.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FREEDOOM_URL: https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip
+  FREEDOOM_SHA256: 3f9b264f3e3ce503b4fb7f6bdcb1f419d93c7b546f4df3e874dd878db9688f59
+
+jobs:
+  package:
+    name: package (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: mac
+            os: macos-15
+            configure: '"-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
+          - platform: windows
+            os: windows-2022
+            configure: -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          # The oldest supported runner keeps the glibc requirement low.
+          - platform: linux
+            os: ubuntu-22.04
+            configure: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then version=${GITHUB_REF_NAME#v}; else version=0.0.0; fi
+          echo "DOOM_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Download Freedoom
+        run: |
+          curl -fsSL -o freedoom.zip "$FREEDOOM_URL"
+          if command -v sha256sum >/dev/null; then sum=$(sha256sum freedoom.zip); else sum=$(shasum -a 256 freedoom.zip); fi
+          [ "${sum%% *}" = "$FREEDOOM_SHA256" ] || { echo "Freedoom checksum mismatch" >&2; exit 1; }
+          unzip -q freedoom.zip
+          mv freedoom-0.13.0 freedoom
+          data="$PWD/freedoom/freedoom1.wad"
+          if command -v cygpath >/dev/null; then data=$(cygpath -m "$data"); fi
+          echo "FREEDOOM_WAD=$data" >> "$GITHUB_ENV"
+
+      - name: Install SDL build dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y libx11-dev libxext-dev libxrandr-dev
+          libxcursor-dev libxi-dev libxss-dev libxtst-dev libxfixes-dev libxkbcommon-dev libwayland-dev
+          wayland-protocols libdecor-0-dev libegl-dev libdrm-dev libgbm-dev libudev-dev libdbus-1-dev
+          libasound2-dev libpulse-dev
+
+      # SDL is always built from source and linked statically, so the game is a
+      # single program with no SDL library to ship beside it.
+      - name: Configure
+        run: >
+          cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DDOOM_BUILD_SDL=ON
+          -DBUILD_TESTING=OFF -DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON
+          -DDOOM_RELEASE_VERSION="$DOOM_RELEASE_VERSION" -DDOOM_GAME_DATA="$FREEDOOM_WAD"
+          ${{ matrix.configure }}
+
+      - name: Build
+        run: cmake --build build/release --config Release --parallel --target doom
+
+      - name: Package Windows or Linux
+        if: matrix.platform != 'mac'
+        run: |
+          sh scripts/package-release.sh ${{ matrix.platform }} build/release freedoom dist
+          cd dist
+          if [ ${{ matrix.platform }} = windows ]; then
+            7z a -tzip DuctTapeDOOM-windows.zip DuctTapeDOOM-windows
+          else
+            tar czf DuctTapeDOOM-linux.tar.gz DuctTapeDOOM-linux
+          fi
+
+      # The complete corresponding source: this commit plus the SDL and Nuked
+      # OPL3 sources the build downloaded and linked in.
+      - name: Package the source
+        if: matrix.platform == 'linux'
+        run: |
+          sh scripts/package-source.sh build/release dist
+          tar czf dist/DuctTapeDOOM-source.tar.gz -C dist DuctTapeDOOM-source
+
+      - name: Package, sign and notarize the Mac app
+        if: matrix.platform == 'mac'
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          FREEDOOM_DIR="$PWD/freedoom" sh scripts/package-macos.sh build/release dist
+          app="dist/Play DOOM.app"
+          if [ -n "$MACOS_CERTIFICATE_P12" ]; then
+            keychain="$RUNNER_TEMP/signing.keychain-db"
+            keychain_password=$(uuidgen)
+            security create-keychain -p "$keychain_password" "$keychain"
+            security set-keychain-settings -lut 21600 "$keychain"
+            security unlock-keychain -p "$keychain_password" "$keychain"
+            echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+            security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+              -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            rm "$RUNNER_TEMP/certificate.p12"
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+            security list-keychains -d user -s "$keychain" login.keychain
+            codesign --force --options runtime --timestamp --sign "Developer ID Application" "$app"
+            ditto -c -k --keepParent "$app" notarize.zip
+            result=$(xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait --output-format json)
+            echo "$result"
+            status=$(echo "$result" | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"])')
+            if [ "$status" != Accepted ]; then
+              id=$(echo "$result" | python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])')
+              xcrun notarytool log "$id" --apple-id "$APPLE_ID" \
+                --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID"
+              exit 1
+            fi
+            xcrun stapler staple "$app"
+          else
+            echo "No signing secrets set; the Mac app is signed ad hoc and not notarized."
+          fi
+          ditto -c -k --keepParent "$app" dist/DuctTapeDOOM-mac.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DuctTapeDOOM-${{ matrix.platform }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # The previous tag and the commits since it.
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      # What's new: .github/changes/<tag>.md when written by hand, otherwise
+      # the commit subjects since the previous tag; then the download notes.
+      - name: Write release notes
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          {
+            echo "## What's new in $GITHUB_REF_NAME"
+            echo
+            if [ -f ".github/changes/$GITHUB_REF_NAME.md" ]; then
+              cat ".github/changes/$GITHUB_REF_NAME.md"
+            elif [ -n "$previous" ]; then
+              git log --no-merges --reverse --format='- %s' "$previous..$GITHUB_REF_NAME"
+            fi
+            echo
+            cat .github/release-notes.md
+          } > release-notes.md
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/* --prerelease
+          --title "Duct-Tape DOOM $GITHUB_REF_NAME" --notes-file release-notes.md

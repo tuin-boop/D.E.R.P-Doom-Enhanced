@@ -1,0 +1,29 @@
+FLUID MONSTER SPAWN FIX - 16 October 2026
+
+Launch DuctTapeDoom-monsters.exe or the updated DuctTapeDoom.exe.
+
+Some vanilla maps place monsters slightly overlapping a blocking line.
+An ordinary Doom walking step can clear that overlap, but the smaller Fluid
+substeps all remain inside it and fail. The E1M7 STUCK save reproduced this
+with six corridor monsters at y=-400, still at their exact spawn positions.
+Their direction was DI_NODIR while their chase counters kept decreasing.
+
+The fix checks whether the current position overlaps an obstacle at chase
+state entry. In that case only, the original collision-checked full Doom step
+runs for that state, with no additional substeps. Once clear, smooth movement
+resumes. No collision bypass or teleport is used. Existing saves recover.
+Demo playback, recording and network modes retain their existing behavior.
+Renderer, graphics and previous performance/water/audio fixes are retained.
+
+VALIDATION
+Loaded a copy of the user's STUCK save in fullscreen 2560x1440 and observed
+10 seconds with the same player position and no player attacks:
+- Previous Fluid movement: all six remained at their original corridor positions.
+- Fluid disabled: the same monsters immediately moved clear.
+- Updated Fluid movement: all six moved clear and resumed their normal chase.
+The user also confirmed that the observed test appeared fixed.
+Original save is preserved. Tests used base Ultimate Doom, Fluid Weapons,
+Fluid SFX and native FluidMonsters support; silent test audio backend.
+
+All 23 CTest checks passed. Embedded engine matches the tested Release build.
+Microsoft Defender found no threats.

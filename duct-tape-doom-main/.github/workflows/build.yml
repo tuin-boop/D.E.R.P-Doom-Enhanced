@@ -1,0 +1,90 @@
+name: Portable build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, macos-15-intel, windows-2022]
+        configuration: [Debug, Release]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure
+        run: cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build/ci --config ${{ matrix.configuration }} --parallel
+      - name: Test
+        run: ctest --test-dir build/ci -C ${{ matrix.configuration }} --output-on-failure
+
+  linux-sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure
+        run: cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Debug -DDOOM_ENABLE_SANITIZERS=ON
+      - name: Build
+        run: cmake --build build/ci --parallel
+      - name: Test
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          ASAN_OPTIONS: detect_leaks=1
+        run: ctest --test-dir build/ci --output-on-failure
+
+  native-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure SDL and the 3D renderer
+        run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DDOOM_BUILD_SDL=ON
+      - name: Build playable app
+        run: cmake --build build/native --parallel
+      - name: Test without game data or a game window
+        run: ctest --test-dir build/native --output-on-failure
+
+  native-sdl:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install SDL build dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y libx11-dev libxext-dev libxrandr-dev
+          libxcursor-dev libxi-dev libxss-dev libxtst-dev libxfixes-dev libxkbcommon-dev libwayland-dev
+          wayland-protocols libdecor-0-dev libegl-dev libdrm-dev libgbm-dev libudev-dev libdbus-1-dev
+          libasound2-dev libpulse-dev glslang-tools spirv-cross
+      - name: Configure SDL and the SDL_gpu renderer
+        run: cmake -S . -B build/native -DCMAKE_BUILD_TYPE=Release -DDOOM_BUILD_SDL=ON
+      - name: Build playable app
+        run: cmake --build build/native --config Release --parallel
+      - name: Test without game data or a game window
+        run: ctest --test-dir build/native -C Release --output-on-failure
+
+  historical-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install X11 development files
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxext-dev
+      - name: Configure
+        run: cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Debug -DDOOM_BUILD_X11=ON
+      - name: Build
+        run: cmake --build build/ci --parallel
+      - name: Test portable target
+        run: ctest --test-dir build/ci --output-on-failure

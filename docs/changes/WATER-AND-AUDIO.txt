@@ -1,0 +1,40 @@
+WATER AND POSITIONAL AUDIO UPDATE - 16 October 2026
+
+Launch DuctTapeDoom-water.exe (or the updated DuctTapeDoom.exe).
+The Duct Tape Doom renderer and previous door-performance work are retained.
+
+CHANGES
+- Positional sounds now attenuate normally on map 8. The old Doom exception
+  used a minimum volume of 15, which is full volume in this engine's range.
+  Deliberately global boss sounds retain their existing non-positional calls.
+- Sky fog keeps atmospheric haze but excludes local light-volume glow, so
+  nearby animated/pulsing lights cannot tint the distant sky through this path.
+  Sky alpha is explicitly opaque outside the reflection capture, preventing
+  texture coverage from being interpreted as heat-haze strength.
+- Liquid detail becomes calmer with distance (192 to 1024 map units): palette
+  mip sampling and gentler bump highlights stabilize distant waves. This also
+  works with global filtering disabled. Nearby animation remains unchanged;
+  water, nukage, slime, blood and lava retain their textures and animation.
+- Water mirror distortion is bounded to 2.5 reference pixels and diminishes
+  with distance. Reflection edges fade instead of stretching border samples.
+  Reflection color and proximity now sample the same distorted location.
+- Settled corpse shadows use a low visual height and shorter footprint rather
+  than projecting their collision height into long strips from low lights.
+  This addresses a plausible source of the dark patches in the supplied shots.
+
+VALIDATION AND LIMITS
+Fullscreen 2560x1440 runtime checks with the user's graphics settings, base
+Ultimate Doom IWAD, Tech Gone Bad, Fluid Weapons, SFX addon and FluidMonsters.
+A 152-view map sweep passed on the initial version; the final liquid sampling
+was checked in the outdoor pool view (-1560,48 facing east), with screenshot
+inspection and shader compilation. This view retained nearby liquid detail.
+The profiler waits for the GPU; screenshot FPS text includes capture stalls
+and is not a live gameplay performance result.
+A runtime regression check compares positional sound falloff on maps 1 and 8
+at 21 distances, checks intermediate attenuation and far-distance silence.
+The exact corpse arrangement and moving-camera artifacts from the user's
+screenshots were not reproduced, so those visual fixes still need confirmation
+in that saved scene. No claim is made that every reported artifact is resolved.
+
+All 23 CTest checks passed. Embedded engine matches the tested Release engine.
+Microsoft Defender found no threats.

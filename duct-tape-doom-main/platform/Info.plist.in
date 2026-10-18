@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleExecutable</key><string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+    <key>CFBundleIdentifier</key><string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
+    <key>CFBundleName</key><string>Play DOOM</string>
+    <key>CFBundleDisplayName</key><string>Play DOOM</string>
+    <key>CFBundleVersion</key><string>${DOOM_RELEASE_VERSION}</string>
+    <key>CFBundleShortVersionString</key><string>${DOOM_RELEASE_VERSION}</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>LSMinimumSystemVersion</key><string>11.0</string>
+    <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key><string>resource</string>
+</dict></plist>

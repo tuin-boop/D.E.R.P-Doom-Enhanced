@@ -1,0 +1,38 @@
+ADAPTIVE EMISSION AND FASTER BAKING - 2026-10-15
+
+The engine measures emissive texel coverage over the actual wall, floor and
+ceiling area of each map. Above 8% coverage in a fixture's hue, its emission
+is reduced smoothly according to that coverage. This is automatic: there
+are no SIGIL names, map numbers or special-case texture dimensions in the
+calculation. Repeating a small texture over a large area counts correctly.
+Ordinary sparse fixtures remain at their original strength. Red-dominated
+coverage does not attenuate an isolated blue fixture. The adjustment affects
+the material glow, bloom and its baked/live light sources consistently.
+
+Lava and glowing slime keep their visible self-glow. Their emitted light
+retains at least 40% of its original source strength. A separate local RGB
+shoulder limits excessive accumulated lamp light, including its live bump
+and gloss contributions, while keeping transient weapon lights separate.
+Texture artwork, renderer features and the user's graphics settings remain.
+
+Measured coverage: SIGIL E5M1 RGB 23.6%, 4.7%, 1.4%; Doom E1M1 about 0.8%
+per channel, E1M2 0.8%, 0.7%, 0.6%. E1M1/E1M2 therefore do not activate the
+material coverage reduction. This coverage estimate is map-wide; the RGB
+accumulation limit is evaluated locally. It is not camera auto-exposure.
+
+Loading optimization: a balanced XY bounding tree skips linedefs a bake ray
+cannot reach. The exact intersection, masks, sector heights, decoration
+occlusion and all lighting sample counts are retained. Door/lift movement
+does not invalidate these XY bounds. Equal-distance intersections preserve
+their original order. Small sectors keep the simple linear search.
+
+SIGIL E5M1 previously took about 25-30 seconds in the profiler on this PC;
+the optimized runs were typically 8-10 seconds (9.5 seconds in the final
+visual check). Timing varies with other work on the computer. This is a
+loading improvement, not a promise of higher in-game FPS.
+
+Developer verification: -verifybakerays compares accelerated and linear ray
+results, including exact hit coordinates. A complete SIGIL load and sampled
+views passed this comparison. The baked-lighting unit test also compares
+12,000 rays through a concave 160-sided room and checks coverage attenuation,
+blue fixture preservation, liquid illumination and monotonic light rolloff.

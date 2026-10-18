@@ -1,0 +1,19 @@
+Original Fluid Weapons switching
+
+Replaces the generic whole-weapon tilt with per-tick original Select/Deselect
+poses for all nine weapons: frame changes, support hands, pivots, scale,
+rotation, mirrors, and alternate draws/holsters. Includes separate gloved-fist
+sequences. The native playback does not load a scripting runtime.
+
+The engine still owns ammo and firing timing. Firing/auxiliary actions cancel
+visual settling, and chaingun rotation transfers back to normal playback.
+Ordinary switching is covered; special mid-fire lower/reload branches and the
+optional chainsaw starter-cord mode are not included in these clips.
+
+Validation: fullscreen 2560x1440 captures of all nine weapons, every captured
+sprite composed successfully, reproducible generated data, 24/24 tests passed.
+
+Smooth switching correction: continuous captured poses now interpolate at
+the display frame rate even when the original PSprite interpolation flag
+was cleared. Animation duration and frame order are unchanged. A regression
+test checks the intermediate shotgun poses; all three relevant suites pass.

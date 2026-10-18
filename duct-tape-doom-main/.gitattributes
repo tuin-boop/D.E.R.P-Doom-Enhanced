@@ -1,0 +1,2 @@
+# Generated from platform/shaders by scripts/compile_gpu_shaders.cmake
+platform/gpu_shaders.h linguist-generated=true -diff

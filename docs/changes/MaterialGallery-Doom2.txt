@@ -1,0 +1,7 @@
+MATERIAL GALLERY: 428 rooms, 428 wall textures, 147 floor/ceiling flats.
+Use with doom2.wad. Start a new game at MAP01.
+Rooms run left to right, then north, in rows of 10. Every room has a working door.
+Cross corridors connect every row. CSV lists each room and entrance coordinates.
+All stock wall definitions, flats, animated liquids and sky flats are included. Liquid display floors are recessed and safe.
+The first rooms show REDWALL1 and colored door strips. The first corridor has keys and weapons.
+This WAD contains only a generated map, no IWAD artwork.

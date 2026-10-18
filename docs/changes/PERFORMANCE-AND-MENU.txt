@@ -1,0 +1,29 @@
+PERFORMANCE AND STARTUP MENU — 2026-10-15
+
+Renderer and visual settings retained. No lights, shadows, reflection passes,
+resolution or texture quality were removed or reduced.
+
+Measured on this computer (RTX 5070), 1280x800 window, a copy of the user's
+saved graphics settings, rerelease Doom IWAD, E1M1/E1M2, spacing 1024.
+Only fullscreen was disabled for the test. The profiler fences each GPU frame;
+these CPU timings describe the test workload, not a promise of live-game FPS.
+
+                   Before CPU/frame     After CPU/frame
+E1M1 worst view          4.3 ms              2.6 ms
+E1M1 median             4.1 ms              2.6 ms
+E1M2 worst view          9.3 ms              6.2 ms
+E1M2 median             8.1 ms              5.7 ms
+
+The bottleneck was CPU-side lighting, not GPU capacity. The changes remove
+out-of-line min/max calls from finite triangle/light bound checks and cache
+exact wall-shadow blocker lists for unchanged light positions/cones. Changes
+to interpolated sector heights, sky classification or level invalidate them.
+Moving lights use their new positions; intensity/flicker still updates normally.
+
+All 128 sampled views retained identical light counts, shadow-blocker counts,
+triangle counts, lit triangles, light-triangle pairs and reflection flags.
+Performance varies with map, moving doors/lights, mods and display resolution.
+
+Startup menu: rerelease title/help/credit/intermission artwork is 560x200.
+The old renderer rejected it entirely, leaving missing or stale backgrounds.
+It now draws the centered original 320x200 composition with safe clipping.

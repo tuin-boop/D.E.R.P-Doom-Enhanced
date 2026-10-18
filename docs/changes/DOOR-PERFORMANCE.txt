@@ -1,0 +1,44 @@
+SAVED-DOOR PERFORMANCE UPDATE - 16 October 2026
+
+Launch DuctTapeDoom-doors.exe or the updated DuctTapeDoom.exe.
+The Duct Tape Doom renderer, resolution and graphics quality are retained.
+
+CHANGES
+Moving sectors invalidate only light-blocker cache entries whose original
+query bounds intersect changed sector borders, instead of clearing all entries.
+Surface-light merging uses hashed lookup while retaining accumulation order
+and sorting the output to match the original implementation exactly.
+Background lighting rebakes reuse a persistent pool of up to four workers,
+instead of spawning half the hardware thread count for every phase. This
+leaves CPU capacity for rendering while performing the same bake calculations.
+The existing asynchronous bake/coalescing behavior remains.
+
+FULLSCREEN TEST
+User's TEST save, Tech Gone Bad E1M8, base Ultimate Doom IWAD; three door
+open/close cycles without moving the player. Fluid Weapons, SFX addon,
+FluidMonsters and the user's graphics settings; fullscreen 2560x1440,
+100% render scale. Core i7-14700F / RTX 5070. Silent test audio backend.
+No verification instrumentation during performance measurements.
+
+While the door moved:
+Previous build: 50.7 FPS average, p99 27.24 ms, worst 28.34 ms;
+408/545 frames exceeded 16.67 ms.
+Updated build: 96.1 FPS average, p99 16.15 ms, worst 18.27 ms;
+4/1037 frames exceeded 16.67 ms.
+Updated repeat: 92.9 FPS average, p99 16.46 ms, worst 18.62 ms;
+7/1001 frames exceeded 16.67 ms.
+Settled averages were 140.4 FPS before, 150.2 and 144.2 FPS after.
+
+These are fullscreen results. Earlier windowed tests are not interchangeable
+with these measurements. Brief dips remain; this is not a guaranteed 60 FPS
+minimum or a complete playthrough benchmark. Frame intervals measure the
+application loop, not physical display scanout.
+
+VALIDATION
+The final build passed the saved-door test with exact thread, blocker-cache
+and surface-merge recomputation checks across three cycles. The original
+TEST save was preserved. Automated tests also compare fast surface merging
+against the original ordered implementation and exercise worker pool sizes.
+
+All 23 CTest checks passed. Packaged engine hash matches the tested Release
+engine; Microsoft Defender scan found no threats.

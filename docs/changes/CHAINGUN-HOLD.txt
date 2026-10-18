@@ -1,0 +1,4 @@
+CHAINGUN HELD RIGHT-MOUSE FIX
+Matches the supplied FluidWeapons Chaingun.zsc: right mouse starts the idle spin only below the source speed threshold; it preserves existing firing rotation after a burst instead of decelerating through zero and reversing it. Primary fire resumes while right mouse remains held. Releasing both buttons lets rotation and sound fade out.
+Regression coverage: idle alt spin, three repeated primary bursts with alt continuously held, sustained between-burst speed, immediate muzzle flash on resumed primary, release fade, and weapon-switch sound cleanup.
+The tentative report of a sergeant stuck near a small ledge is not reproduced. Standard 24-unit step, ceiling-clearance and drop-off rules remain unchanged; a save at the affected location is needed to diagnose that instance.

@@ -1,0 +1,30 @@
+TOASTY GIB EASTER EGG
+A monster's actual extreme-death (gib) transition has a 10% cosmetic chance.
+Ordinary deaths and player deaths do not trigger it. Cosmetic random rolls do
+not consume Doom's gameplay RNG. Concurrent triggers do not stack voices or
+keep the picture onscreen.
+
+Uses the supplied full-shoulders transparent portrait and Toasty voice clip.
+The original 1190x1322 PNG is embedded unchanged and drawn in its own GPU pass
+at display resolution, after world postprocessing, outside the 320x200 HUD.
+The portrait rises from the bottom-right over 0.18 seconds, stays until 0.90,
+then slides down over 0.16 seconds. Animation follows game time and pauses.
+Audio uses the effects-volume setting. Both assets are embedded in the engine;
+no external image, video, codec or sound mod is needed at runtime.
+
+Asset provenance: portrait supplied in this chat; voice supplied at
+the supplied Toasty WEBM clip.
+The voice is trimmed from 0.10 to 1.00 seconds to remove surrounding silence,
+and embedded as 22050 Hz mono PCM. assets/toasty/embed.py regenerates headers.
+These supplied media assets are separate from the engine's source-code license.
+
+Validation: fullscreen 2560x1440 visual check of the high-resolution overlay.
+100 ordinary deaths produced no event; 1000 gibs produced 109 events.
+Audio mixer accepted the embedded voice (19845 samples at 22050 Hz).
+Exit/disappearance frames checked. Defender scan clean; embedded engine hash verified.
+
+
+F5 > TEST TOASTY previews the full effect immediately. Enter activates it and
+closes the menu. Repeating the test restarts the effect without stacking audio.
+Fullscreen runtime test verified F5 selection, activation, menu close and audio.
+

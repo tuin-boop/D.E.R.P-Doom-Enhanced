@@ -1,0 +1,32 @@
+# Build output and the locally packaged app
+/build/
+/Play DOOM.app/
+/CMakeUserPresets.json
+/dist/
+*.o
+*.obj
+*.exe
+*.a
+*.lib
+
+# Game data is never committed: commercial IWADs are not redistributable,
+# and Freedoom is downloaded at build time.
+*.wad
+*.WAD
+*.Wad
+*.pk3
+*.zip
+
+# Runtime files written by the game
+*.cfg
+*.dsg
+*.pcx
+
+# Editor and OS clutter
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Written by the portability test, like portability.cfg and .wad
+/portability.deh
