@@ -49,7 +49,7 @@ static void indexCuts(void){
 int p_breakablewalls=1;
 int p_throughwalls=0,p_breachdoors=0,p_wall_damage=100,p_deeperdig=0;
 int P_GlobalDigThroughEnabled(void){int mode=(p_throughwalls?1:0)|(p_breachdoors?2:0);return P_GlobalDigEnabled()&&mode?(mode|(p_deeperdig?4:0)):0;}
-int P_GlobalDigMaxDepth(void){return p_deeperdig?1024:256;}
+int P_GlobalDigMaxDepth(void){return p_deeperdig?4096:256;}
 static void resetBreaches(void);
 static void breachBounds(int line,int side,float *b,int *found);
 static unsigned breachRevision(int line,int side);
@@ -340,7 +340,7 @@ void P_GlobalDigLoad(const unsigned char *data,int length){
     int n,ln;P_GlobalDigReset();if(length<12||memcmp(data,"DIG2",4))return;
     memcpy(&ln,data+4,4);memcpy(&n,data+8,4);if(ln!=numlines||n<0||n>MAX_CUTS||length<12+n*(int)sizeof(cut_t))return;
     for(int i=0;i<n;++i){cut_t c;memcpy(&c,data+12+i*sizeof(cut_t),sizeof(c));
-        if(c.line<0||c.line>=numlines||c.side<0||c.side>1||lines[c.line].sidenum[c.side]<0||!isfinite(c.u)||!isfinite(c.z)||!isfinite(c.strength)||c.strength<0||c.strength>4096)return;
+        if(c.line<0||c.line>=numlines||c.side<0||c.side>1||lines[c.line].sidenum[c.side]<0||!isfinite(c.u)||!isfinite(c.z)||!isfinite(c.strength)||c.strength<0||c.strength>16384)return;
     }
     count=n;memcpy(cuts,data+12,n*sizeof(cut_t));for(int i=0;i<n;++i){cutAnchors[i]=(cutanchor_t){-1,0,0};cutVersions[i]=revision+1;}++revision;
     int offset=12+n*(int)sizeof(cut_t),sectorsSaved,fc;

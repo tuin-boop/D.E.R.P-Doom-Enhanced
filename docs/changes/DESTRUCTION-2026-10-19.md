@@ -10,7 +10,7 @@ Experimental Windows build of D.E.R.P Doom Enhanced, based on Duct-Tape DOOM and
 - Optional through-wall breaches create traversable openings between valid rooms.
 - Optional door breaches include locked doors. These can bypass keys and switches and break map progression.
 - Wall damage slider: 100–500%, controlling how quickly new wall and door damage accumulates.
-- Deeper digging toggle: raises the wall/door depth limit from 256 to 1,024 map units. Off by default; requires wall or door breaching.
+- Deeper digging toggle: raises the wall/door depth limit from 256 to 4,096 map units. Off by default; requires wall or door breaching.
 - Disabling deeper digging restores normal limits without erasing stored damage.
 - Outside-map void remains sealed. Breaches require supported opposing parallel faces and a valid room beyond.
 - Through-floor and through-ceiling passages are not implemented.
@@ -27,6 +27,6 @@ Download **DERP-Destruction.exe**, run it and select your own compatible IWAD. T
 This build uses separate destruction-prototype settings and saves. It does not replace the stable release.
 
 ## Validation
-Release engine and native smoke build passed. Tests covered a full 1,024-unit breach, partial rocket impacts, toggle persistence, sight, hitscan, rocket traversal, save/load and two-way player passage. Locked-door and bundled-feature regression checks passed.
+Release engine and native smoke build passed. Tests covered a full 4,096-unit breach, partial rocket impacts, toggle persistence, sight, hitscan, rocket traversal, save/load and two-way player passage. Locked-door and bundled-feature regression checks passed.
 
 See the accompanying TESTED notes for the earlier surface, performance and damage-slider checks.

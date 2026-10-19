@@ -535,7 +535,7 @@ static void test_breaches(void){
             puts("Locked-door fixture: normal use rejected without key.");
         }
         if(P_GlobalDigBreachMargin(line,0,u,z)>0)I_Error("One small hit breached wall prematurely");
-        for(int n=0;n<(p_deeperdig?160:thickTest?64:24);++n){
+        for(int n=0;n<(p_deeperdig?640:thickTest?64:24);++n){
             for(int v=-32;v<=32;v+=16)for(int h=-32;h<=32;h+=16)global_hit(line,0,u+v,z+h);
             if(thickTest&&depth>=256&&n==12){
                 float current=P_GlobalDigDepth(line,0,u,z);
@@ -562,12 +562,12 @@ static void test_breaches(void){
         if(P_GlobalDigBreachRay(line,x,y,z,(float)-ty,(float)tx,0))I_Error("Breach toggle off still passes shot");
         p_throughwalls=doorTest?0:1;p_breachdoors=doorTest;
         P_UnsetThingPosition(player);player->x=(fixed_t)((x+ty*40)*FRACUNIT);player->y=(fixed_t)((y-tx*40)*FRACUNIT);player->z=(fixed_t)((z-36)*FRACUNIT);P_SetThingPosition(player);
-        player->floorz=player->subsector->sector->floorheight;player->ceilingz=player->subsector->sector->ceilingheight;
+        player->floorz=player->subsector->sector->floorheight;player->ceilingz=player->subsector->sector->ceilingheight;players[0].viewz=player->z+41*FRACUNIT;
         player->angle=(angle_t)(atan2(tx,-ty)*(4294967296.0/(2*3.141592653589793)));players[0].cheats|=CF_GODMODE;
         mobj_t *target=P_SpawnMobj((fixed_t)((x-ty*(depth+36))*FRACUNIT),(fixed_t)((y+tx*(depth+36))*FRACUNIT),player->z,MT_TROOP);
         target->health=1000;target->flags&=~MF_COUNTKILL;
         if(!P_CheckSight(player,target))I_Error("Sight failed through breach");
-        P_LineAttack(player,player->angle,2048*FRACUNIT,0,10);
+        P_LineAttack(player,player->angle,(fixed_t)((depth+128)*FRACUNIT),0,10);
         if(target->health>=1000)I_Error("Hitscan failed through breach");
         P_RemoveMobj(target);
         mobj_t *rocket=P_SpawnMobj(player->x,player->y,player->z+32*FRACUNIT,MT_ROCKET);rocket->target=player;rocket->momx=(fixed_t)(-ty*10*FRACUNIT);rocket->momy=(fixed_t)(tx*10*FRACUNIT);

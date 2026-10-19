@@ -17,7 +17,7 @@ The Windows launcher includes the engine and the supplied FluidWeapons, FluidWea
 
 ## Latest update
 
-This branch contains the separate **destruction prototype**. Rockets excavate walls, floors and ceilings; optional wall and door breaches allow passage into valid rooms. The wall damage slider ranges from 100–500%, and optional deeper digging extends the depth limit from 256 to 1,024 units. See the [prototype notes and limitations](docs/changes/DESTRUCTION-2026-10-19.md).
+This branch contains the separate **destruction prototype**. Rockets excavate walls, floors and ceilings; optional wall and door breaches allow passage into valid rooms. The wall damage slider ranges from 100–500%, and optional deeper digging extends the depth limit from 256 to 4,096 units. See the [prototype notes and limitations](docs/changes/DESTRUCTION-2026-10-19.md).
 
 The stable release remains available separately. Door breaches can bypass keys and break map progression.
 

@@ -1,11 +1,11 @@
 Deeper digging - tested 2026-10-19
-F4 > Effects > Doors > Deeper digging (up to 1024 units).
+F4 > Effects > Doors > Deeper digging (up to 4096 units).
 Default off. Requires Breakable surfaces and wall or door breaches.
-Raises excavation limit from 256 to 1024 map units; valid room exit required, exterior remains sealed.
+Raises excavation limit from 256 to 4096 map units; valid room exit required, exterior remains sealed.
 Disabling restores standard limits without erasing stored damage.
 Wall damage 100-500% controls excavation speed independently.
 Release engine and native smoke build passed.
-Deep fixture passed at 1024 units: partial rocket impacts, toggle persistence, sight, hitscan, rocket crossing, save/load and two-way player passage.
+Deep fixture passed at 4096 units: partial rocket impacts, toggle persistence, sight, hitscan, rocket crossing, save/load and two-way player passage.
 Door breach regression and bundled feature regression passed.
 Ready launcher includes all three bundled mods and digging materials.
 Production release unchanged.
