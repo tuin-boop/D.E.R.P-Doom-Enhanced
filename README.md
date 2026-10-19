@@ -2,7 +2,7 @@
 
 A customized Windows build based on **Duct-Tape DOOM**, retaining its renderer and adding native Fluid Weapons/FluidMonsters support, performance improvements, a modern HUD, and gameplay presentation features.
 
-**[Download the destruction prototype](https://github.com/tuin-boop/D.E.R.P-Doom-Enhanced/releases/tag/destruction-2026.10.19)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
+**[Download the destruction prototype](https://github.com/tuin-boop/D.E.R.P-Doom-Enhanced/releases/tag/destruction-2026.10.19-4096)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
 
 ![Launcher artwork](launcher/hero.png)
 
@@ -116,3 +116,4 @@ This is targeted native support for the supplied mod versions, **not a general Z
 - The supplied Toasty portrait/audio are separate media assets; the engine's GPL does not relicense those assets.
 
 See [LICENSE](LICENSE), [licenses/NOTICE.txt](licenses/NOTICE.txt), and [licenses/THIRD_PARTY.md](licenses/THIRD_PARTY.md). Original per-component licensing and attribution requirements remain applicable.
+
