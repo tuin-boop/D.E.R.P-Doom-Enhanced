@@ -22,9 +22,13 @@ void P_GlobalDigFlatHeights(mobj_t *thing,fixed_t x,fixed_t y,int sector,fixed_t
 void P_GlobalDigRefreshHeights(mobj_t *thing);
 void P_GlobalDigReset(void);
 int P_GlobalDigImpact(mobj_t *rocket);
+void P_GlobalDigBarrelBlast(mobj_t *barrel);
 void P_GlobalDigMonsterContact(mobj_t *rocket,fixed_t x,fixed_t y);
+int P_GlobalDigBreachSupportRoom(int sector);
+fixed_t P_GlobalDigBreachStepFloor(mobj_t *thing,fixed_t x,fixed_t y,fixed_t floor);
 int P_GlobalDigFit(int line,int side,mobj_t *thing,fixed_t x,fixed_t y);
 int P_GlobalDigPosition(mobj_t *thing,fixed_t x,fixed_t y,int *sector);
+void P_GlobalDigWallPoint(int line,int side,float u,float z,float depth,float *x,float *y);
 float P_GlobalDigDepth(int line,int side,float u,float z);
 int P_GlobalDigBounds(int line,int side,float *bounds);
 unsigned P_GlobalDigRevision(void);

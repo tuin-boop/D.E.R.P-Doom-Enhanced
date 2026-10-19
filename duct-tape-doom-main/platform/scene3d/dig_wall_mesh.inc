@@ -28,6 +28,7 @@ static bool addExcavatedWall(const line_t &line,int side,int span,Point a,Point 
         float tx=(b.x-a.x)/length,ty=(b.y-a.y)/length;unsigned mode=sectorMode(sides[line.sidenum[side]].sector);
         auto vertex=[&](float u,float z,float depth,bool rock){
             Vertex v={a.x+u*tx-depth*ty,a.y+u*ty+depth*tx,z,rock?u:offset+u,rock?-z:anchor-z,1,mode};
+            if(depth>0)P_GlobalDigWallPoint(id,side,u,z,depth,&v.x,&v.y);
             if(!rock)bakeWallCoordinates(line,side,u,v,true);
             return v;
         };

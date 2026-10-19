@@ -57,9 +57,13 @@ int P_GlobalDigEnabled(void){return p_breakablewalls&&M_CheckParm("-digglobal")!
 void P_GlobalDigFlatReset(void);
 void P_GlobalDigReset(void){P_GlobalDigFlatReset();resetBreaches();count=0;blockedMissile=NULL;monsterMissile=NULL;impactStrength=4;++revision;free(heads);free(faceBounds);heads=NULL;faceBounds=NULL;}
 unsigned P_GlobalDigRevision(void){return revision;}
+static int joinedFace(int line,int side,int end);
 unsigned P_GlobalDigWallRevision(int line,int side){
     indexCuts();unsigned value=0;
     for(int i=heads[line*2+side];i>=0;i=nextCut[i])if(cutVersions[i]>value)value=cutVersions[i];
+    for(int end=0;end<2;++end){int key=joinedFace(line,side,end);if(key<0)continue;
+        for(int i=heads[key];i>=0;i=nextCut[i])if(cutVersions[i]>value)value=cutVersions[i];
+    }
     if(P_GlobalDigThroughEnabled()){unsigned other=breachRevision(line,side);if(other>value)value=other;}
     return value;
 }
@@ -69,13 +73,37 @@ static double frame(int line,int side,double *ax,double *ay,double *tx,double *t
     *ax=unit(a->x);*ay=unit(a->y);*tx=unit(b->x-a->x);*ty=unit(b->y-a->y);
     double len=hypot(*tx,*ty);if(len<.001)return 0;*tx/=len;*ty/=len;return len;
 }
+// Immutable oriented endpoint adjacency. Only join faces bounding the same
+// rooms/material volume; moving sector boundaries remain independent.
+static int joinedFace(int line,int side,int end){
+    static int *links,serial=-1,size;
+    if(serial!=r_levelserial||size!=numlines){
+        free(links);size=numlines;serial=r_levelserial;
+        links=malloc((size_t)numlines*4*sizeof(int));
+        if(!links)I_Error("Crater adjacency allocation failed");
+        for(int i=0;i<numlines*4;++i)links[i]=-2;
+    }
+    int *cached=&links[(line*2+side)*2+end];if(*cached!=-2)return *cached;
+    *cached=-1;line_t *l=&lines[line];
+    sector_t *room=side?l->backsector:l->frontsector,*back=side?l->frontsector:l->backsector;
+    if(!room)return -1;
+    vertex_t *corner=end?(side?l->v1:l->v2):(side?l->v2:l->v1);
+    for(int i=0;i<room->linecount;++i){line_t *other=room->lines[i];if(other==l)continue;
+        for(int ns=0;ns<2;++ns){
+            if(other->sidenum[ns]<0||(ns?other->backsector:other->frontsector)!=room||
+               (ns?other->frontsector:other->backsector)!=back)continue;
+            vertex_t *v=end?(ns?other->v2:other->v1):(ns?other->v1:other->v2);
+            if(v->x==corner->x&&v->y==corner->y){*cached=(int)(other-lines)*2+ns;return *cached;}
+        }
+    }return -1;
+}
 /* Conservative solid thickness: stop before the next map boundary, even
  * when it belongs to another room. Cache only immutable XY topology. */
 typedef struct {int line,side,u;unsigned serial;float limit;} thickness_t;
 static thickness_t thickness[8192];
-float P_GlobalDigWallLimit(int line,int side,float u){
+static double nextWallBoundary(int line,int side,float u,double limit){
     double ax,ay,tx,ty,len=frame(line,side,&ax,&ay,&tx,&ty);if(!len)return 0;
-    double x=ax+u*tx,y=ay+u*ty,nx=-ty,ny=tx,limit=66;
+    double x=ax+u*tx,y=ay+u*ty,nx=-ty,ny=tx;
     for(int i=0;i<numlines;++i){
         if(i==line)continue;
         double bx=unit(lines[i].v1->x),by=unit(lines[i].v1->y);
@@ -85,7 +113,10 @@ float P_GlobalDigWallLimit(int line,int side,float u){
         double v=((bx-x)*ny-(by-y)*nx)/determinant;
         if(t>.01&&v>=-.00001&&v<=1.00001&&t<limit)limit=t;
     }
-    return (float)fmax(0,limit-2); // Leave a solid backing; no disconnected breaches.
+    return limit;
+}
+float P_GlobalDigWallLimit(int line,int side,float u){
+    return (float)fmax(0,nextWallBoundary(line,side,u,66)-2); // Leave a solid backing.
 }
 static float wallLimit(int line,int side,int u){
     unsigned key=((unsigned)line*73856093u^(unsigned)side*19349663u^(unsigned)u*83492791u)%8192;
@@ -95,6 +126,7 @@ static float wallLimit(int line,int side,int u){
     }return c->limit;
 }
 static void spreadFlatToWalls(int sector,int ceiling,float x,float y);
+static void recoverCraterSupport(mobj_t *thing);
 #include "p_digflat.inc"
 /* Sampling at fixed lattice vertices gives both collision and rendering the
  * same continuous piecewise-planar surface. Stable noise breaks the edge. */
@@ -125,7 +157,7 @@ static float lattice(int line,int side,int u,int z,float shift){
         *c=(Sample){line,side,u,z,revision,shift,latticeUncached(line,side,u,z,shift),floor,ceiling};
     return c->value;
 }
-static float sampleDepth(int line,int side,float u,float z,int raw){
+static float sampleDepthBase(int line,int side,float u,float z,int raw){
     float worldZ=z,shift=facePlane(line,side,z);z-=shift;
     int x=(int)floorf(u/4)*4,y=(int)floorf(z/4)*4;
     float a=(u-x)/4,b=(z-y)/4;
@@ -133,8 +165,41 @@ static float sampleDepth(int line,int side,float u,float z,int raw){
     float r=lattice(line,side,a>=b?x+4:x,a>=b?y:y+4,shift);
     if(!raw){p=fminf(p,wallLimit(line,side,x));q=fminf(q,wallLimit(line,side,x+4));r=fminf(r,wallLimit(line,side,a>=b?x+4:x));}
     float depth=a>=b?p*(1-a)+r*(a-b)+q*b:p*(1-b)+r*(b-a)+q*a;
+    return depth;
+}
+static float sampleDepth(int line,int side,float u,float z,int raw){
     double ax,ay,tx,ty,len=frame(line,side,&ax,&ay,&tx,&ty);
-    float edge=fminf(1,fminf(u,(float)len-u)/.75f);return depth*fmaxf(0,edge);
+    if(u<-.001f||u>len+.001f)return 0;
+    float depth=sampleDepthBase(line,side,u,z,raw);
+    // A confirmed finite breach may consume the whole face. The breach
+    // volume itself clips to real room boundaries; an artificial zero-depth
+    // strip here would leave a rectangular frame around a destroyed slab.
+    int end=u>len*.5;float distance=end?(float)len-u:u;
+    if(distance>=.75f)return depth;
+    float shared=raw?depth:0;int neighbor=joinedFace(line,side,end);
+    if(neighbor>=0){
+        double bx,by,ux,uy,other=frame(neighbor/2,neighbor%2,&bx,&by,&ux,&uy);
+        // Reversing surfaces do not enclose a meaningful shared corner.
+        if(tx*ux+ty*uy>(raw?.9999:-.9)){
+            float here=sampleDepthBase(line,side,end?(float)len:0,z,raw);
+            float there=sampleDepthBase(neighbor/2,neighbor%2,end?0:(float)other,z,raw);
+            shared=fminf(here,there);
+        }
+    }
+    float blend=fmaxf(0,distance)/.75f;return shared*(1-blend)+depth*blend;
+}
+// Miter joined crater edges so adjacent wall meshes meet at one world point.
+void P_GlobalDigWallPoint(int line,int side,float u,float z,float depth,float *x,float *y){
+    double ax,ay,tx,ty,len=frame(line,side,&ax,&ay,&tx,&ty);
+    *x=(float)(ax+u*tx-depth*ty);*y=(float)(ay+u*ty+depth*tx);
+    int end=u>len*.5;float distance=end?(float)len-u:u;
+    if(depth<=0||distance>=.75f)return;
+    int neighbor=joinedFace(line,side,end);if(neighbor<0)return;
+    double bx,by,ux,uy;frame(neighbor/2,neighbor%2,&bx,&by,&ux,&uy);
+    double dot=tx*ux+ty*uy;if(dot<=-.9)return;
+    float blend=1-fmaxf(0,distance)/.75f;
+    *x+=(float)(((-ty-uy)/(1+dot)+ty)*depth*blend);
+    *y+=(float)(((tx+ux)/(1+dot)-tx)*depth*blend);
 }
 #include "p_digbreach.inc"
 float P_GlobalDigDepth(int line,int side,float u,float z){
@@ -242,15 +307,53 @@ int P_GlobalDigPosition(mobj_t *thing,fixed_t x,fixed_t y,int *owner){
         sector_t *front=c->side?lines[c->line].backsector:lines[c->line].frontsector;
         float exitDepth=P_GlobalDigBreachLimit(c->line,c->side,(float)u,(float)(unit(thing->z)+unit(thing->height)*.5));
         if(exitDepth>0&&d-radius>=exitDepth)continue;
-        if(exitDepth<=0&&(oldd>80||(oldd>0&&thing->subsector&&thing->subsector->sector!=front)))continue;
+        if(exitDepth<=0&&(oldd>80||(oldd>0&&thing->subsector&&thing->subsector->sector!=front&&thing->subsector->sector!=(c->side?lines[c->line].frontsector:lines[c->line].backsector))))continue;
         if(!solid(c->line,c->side,unit(thing->z)+unit(thing->height)*.5)&&!solid(c->line,c->side,unit(thing->z+thing->height)-.1)&&!solid(c->line,c->side,unit(thing->z)+.1))continue;
+        // A concave sector can return to the room behind this wall plane.
+        // Once another map boundary separates the point from this face,
+        // its crater must not impose collision on that unrelated space.
+        if(exitDepth<=0&&d>0&&nextWallBoundary(c->line,c->side,(float)u,d+.01)<d-.01)continue;
         captureContact=1;int fit=P_GlobalDigFit(c->line,c->side,thing,x,y);captureContact=0;
         if(!fit)return 0;
-        if(d>0){sector_t *s=c->side?lines[c->line].backsector:lines[c->line].frontsector;
+        if(d>=0){sector_t *s=c->side?lines[c->line].backsector:lines[c->line].frontsector;
             if(exitDepth>0){int other=P_GlobalDigBreachSector(c->line,0,0,(float)-ty,(float)tx);if(other>=0&&sectors[other].floorheight>s->floorheight)s=&sectors[other];}
             *owner=(int)(s-sectors);
         }
     }return 1;
+}
+// A closed backing sector is not the vertical space of its excavated face.
+// Recover a player trapped by an older invalid support height to the nearby
+// mouth of that same crater, only after normal collision validates the spot.
+static void recoverCraterSupport(mobj_t *thing){
+    if(!P_GlobalDigEnabled()||!thing->player||(thing->flags&MF_NOCLIP)||!thing->subsector)return;
+    sector_t *room=thing->subsector->sector;
+    if(room->ceilingheight-room->floorheight>=thing->height)return;
+    int owner=-1;
+    if(thing->z>=room->floorheight&&P_GlobalDigPosition(thing,thing->x,thing->y,&owner)&&owner>=0)return;
+    if(thing->z>=room->floorheight&&thing->ceilingz-thing->floorz>=thing->height)return;
+    fixed_t oldz=thing->z;
+    for(int i=0;i<count;++i){
+        cut_t *c=&cuts[i];sector_t *front=c->side?lines[c->line].backsector:lines[c->line].frontsector;
+        sector_t *back=c->side?lines[c->line].frontsector:lines[c->line].backsector;
+        if(back!=room||!front||front->ceilingheight-front->floorheight<thing->height)continue;
+        double ax,ay,tx,ty,len=frame(c->line,c->side,&ax,&ay,&tx,&ty);
+        double u=(unit(thing->x)-ax)*tx+(unit(thing->y)-ay)*ty;
+        double d=-(unit(thing->x)-ax)*ty+(unit(thing->y)-ay)*tx;
+        if(u<0||u>len||d<0||d>80)continue;
+        fixed_t x=(fixed_t)((ax+u*tx+ty*(unit(thing->radius)+2))*FRACUNIT);
+        fixed_t y=(fixed_t)((ay+u*ty-tx*(unit(thing->radius)+2))*FRACUNIT);
+        if(R_PointInSubsector(x,y)->sector!=front)continue;
+        thing->z=front->floorheight;
+        if(P_CheckPosition(thing,x,y)&&tmceilingz-tmfloorz>=thing->height){
+            fixed_t floor=tmfloorz,ceiling=tmceilingz;
+            P_UnsetThingPosition(thing);thing->x=x;thing->y=y;P_SetThingPosition(thing);
+            thing->floorz=floor;thing->ceilingz=ceiling;thing->z=floor;
+            thing->momx=thing->momy=thing->momz=0;
+            thing->player->viewheight=VIEWHEIGHT;thing->player->deltaviewheight=0;
+            thing->player->viewz=thing->z+VIEWHEIGHT;return;
+        }
+        thing->z=oldz;
+    }
 }
 void P_GlobalDigMonsterContact(mobj_t *rocket,fixed_t x,fixed_t y){
     if(!P_GlobalDigEnabled()||rocket->type!=MT_ROCKET)return;
@@ -268,8 +371,8 @@ static int blastVisible(float x,float y,float z,float ex,float ey,float ez,int i
         if(!l->frontsector||!l->backsector||h<=fmax(unit(l->frontsector->floorheight),unit(l->backsector->floorheight))||h>=fmin(unit(l->frontsector->ceilingheight),unit(l->backsector->ceilingheight)))return 0;
     }return 1;
 }
-static int monsterBlast(void){
-    unsigned before=revision;float x=monsterX,y=monsterY,z=monsterZ;
+static int blastCrater(float x,float y,float z){
+    unsigned before=revision;
     sector_t *room=R_PointInSubsector((fixed_t)(x*FRACUNIT),(fixed_t)(y*FRACUNIT))->sector;
     for(int ceiling=0;ceiling<2;++ceiling){float plane=(ceiling?room->ceilingheight:room->floorheight)/(float)FRACUNIT,dist=fabsf(z-plane);
         if(dist>=64||!P_GlobalDigSolidFlat((int)(room-sectors),ceiling))continue;
@@ -284,8 +387,12 @@ static int monsterBlast(void){
     }
     impactStrength=4;return before!=revision;
 }
+void P_GlobalDigBarrelBlast(mobj_t *barrel){
+    if(!P_GlobalDigEnabled()||!barrel||barrel->type!=MT_BARREL)return;
+    blastCrater(unit(barrel->x),unit(barrel->y),unit(barrel->z)+unit(barrel->height)*.5f);
+}
 int P_GlobalDigImpact(mobj_t *rocket){
-    if(monsterMissile==rocket){monsterMissile=NULL;return P_GlobalDigEnabled()?monsterBlast():0;}
+    if(monsterMissile==rocket){monsterMissile=NULL;return P_GlobalDigEnabled()?blastCrater(monsterX,monsterY,monsterZ):0;}
     if(flatMissile==rocket){flatMissile=NULL;return flatChanged;}
     if(!P_GlobalDigEnabled()||rocket->type!=MT_ROCKET)return 0;
     double vx=unit(rocket->momx),vy=unit(rocket->momy),vz=unit(rocket->momz),speed=sqrt(vx*vx+vy*vy+vz*vz);

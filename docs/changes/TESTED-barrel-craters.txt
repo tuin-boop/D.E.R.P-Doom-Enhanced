@@ -1,0 +1,7 @@
+Barrel craters - 2026-10-19
+Barrel A_Explode invokes shared rocket actor-contact blast crater logic at barrel center.
+Same 64-unit proximity/falloff, wall occlusion, solid flat/liquid exclusions, moving anchors and wall damage multiplier.
+Master Breakable surfaces toggle respected. Rocket impacts retain their existing single crater application.
+Normal barrel damage and chain-reaction mechanics unchanged.
+Release engine and smoke builds passed. Surface smoke tested actual barrel explosion action: nearby floor and wall craters, master toggle off, plus existing rocket, liquid exclusion, moving-door save/load, collision and surface regression checks.
+Ready launcher DERP-Destruction-Barrels.exe packaged with all three bundled mods and materials. Original launcher was open, so it was not replaced.

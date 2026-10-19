@@ -1,0 +1,10 @@
+STUCKWEIRD collision fix - 2026-10-19
+Reproduced E1M5 original save at (138.554,251.863,0), sector 63.
+Before: all nine position probes blocked with destruction enabled, all clear when disabled.
+Cause: supplemental crater collision treated ordinary concave room space beyond another map boundary as the original damaged wall's solid interior.
+Fix: skip non-breach supplemental crater checks when an intervening map boundary separates that face from the target position. Preserve breach slab checks.
+After: all eight actual P_TryMove steps and returns pass on unchanged saved game with destruction enabled.
+Surface regression passed including barrel actions, liquid exclusion, moving door save/load, collision, and floor/ceiling impacts.
+Full 4096-unit breach regression passed including sight, hitscan, rockets, save/load and two-way walking.
+Original user save not modified. Tested copies in test-stuckweird.
+Packaged DERP-Destruction-Fixed.exe with barrel craters, 4096-unit digging and all bundled mods.

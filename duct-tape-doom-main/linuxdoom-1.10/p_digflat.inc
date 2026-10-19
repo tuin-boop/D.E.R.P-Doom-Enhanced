@@ -128,6 +128,7 @@ void P_GlobalDigFlatHeights(mobj_t *thing,fixed_t x,fixed_t y,int sector,fixed_t
     }
 }
 void P_GlobalDigRefreshHeights(mobj_t *thing){
+    recoverCraterSupport(thing);
     if(!flatCount||!thing->subsector||thing->flags&MF_NOCLIP)return;
     indexFlats();int s=(int)(thing->subsector->sector-sectors);
     if(flatHeads[s*2]<0&&flatHeads[s*2+1]<0)return;
@@ -136,6 +137,7 @@ void P_GlobalDigRefreshHeights(mobj_t *thing){
     if(thing->floorz==sectors[s].floorheight&&thing->ceilingz==sectors[s].ceilingheight&&
        !P_GlobalDigFlatPatch(s,0,area,bounds)&&!P_GlobalDigFlatPatch(s,1,area,bounds))return;
     // Recheck stationary actors too: a newly excavated crater changes support.
-    P_CheckPosition(thing,thing->x,thing->y);
-    thing->floorz=tmfloorz;thing->ceilingz=tmceilingz;
+    if(P_CheckPosition(thing,thing->x,thing->y)){
+        thing->floorz=tmfloorz;thing->ceilingz=tmceilingz;
+    }
 }

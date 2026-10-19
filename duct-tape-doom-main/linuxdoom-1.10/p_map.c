@@ -465,6 +465,7 @@ P_CheckPosition
         if(owner>=0){tmfloorz=tmdropoffz=sectors[owner].floorheight;tmceilingz=sectors[owner].ceilingheight;}
     }
     P_GlobalDigFlatHeights(thing,x,y,(int)(newsubsec->sector-sectors),&tmfloorz,&tmceilingz);
+    tmfloorz=P_GlobalDigBreachStepFloor(thing,x,y,tmfloorz);
     tmdropoffz=tmfloorz;
     // Check things first, possibly picking things up.
     // The bounding box is extended by MAXRADIUS

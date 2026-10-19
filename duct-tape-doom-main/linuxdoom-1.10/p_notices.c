@@ -36,11 +36,14 @@ void P_NoticeWeapon(player_t* player,int weapon){
  int i=(int)(player-players);unsigned bit=1u<<weapon;
  if(!(progress[i].weapons&bit)){progress[i].weapons|=bit;P_Notice(i,N_WEAPON,weapon);}
 }
-void P_NoticeDamage(player_t* player,int damage){
+void P_NoticeDamage(player_t* player,int damage,mobj_t* source){
  noticeprogress_t* p=&progress[player-players];
  if(damage<=0)return;p->damaged=1;p->lastDamage=leveltime;
- if(player->health>0&&player->health<10)p->low=1;
- if(player->health<=0)p->low=0;
+ // Only a surviving hit from an enemy arms the close-call message.
+ // Value 2 marks attributed damage in the existing save trailer; legacy
+ // value 1 had no source information and must not replay after loading.
+ p->low=player->health>0&&player->health<10&&source&&
+        source!=player->mo&&(source->info->flags&MF_COUNTKILL)?2:0;
 }
 static void award(int i,int slot,int kind){
  if(leveltime>=progress[i].cooldown[slot]){P_Notice(i,kind,0);progress[i].cooldown[slot]=leveltime+35*20;}
@@ -62,7 +65,9 @@ void P_NoticeKill(mobj_t* source,mobj_t* target,mobj_t* inflictor){
 }
 void P_NoticeTick(player_t* player){
  int i=(int)(player-players);noticeprogress_t* p=&progress[i];
- if(!p->low||player->health<=0||leveltime-p->lastDamage<35*5||leveltime%35)return;
+ if(!p->low)return;
+ if(player->health<=0||leveltime-p->lastDamage>35*20){p->low=0;return;}
+ if(leveltime-p->lastDamage<35*5||leveltime%35)return;
  for(thinker_t* th=thinkercap.next;th!=&thinkercap;th=th->next){
   if(th->function.acp1!=(actionf_p1)P_MobjThinker)continue;
   mobj_t* mo=(mobj_t*)th;
@@ -94,7 +99,7 @@ void P_LoadNotices(const unsigned char* data,int length){
  if(length<8+MAXPLAYERS*32||memcmp(data,"DNOTICE1",8))return;
  int at=8;
  for(int i=0;i<MAXPLAYERS;++i){uint32_t v[8]={0};for(int n=0;n<8;++n)for(int b=0;b<4;++b)v[n]|=(uint32_t)data[at++]<<(b*8);
-  noticeprogress_t* p=&progress[i];p->weapons=v[0];p->damaged=v[1]!=0;p->low=v[2]!=0;p->lastDamage=(int)v[3];
+  noticeprogress_t* p=&progress[i];p->weapons=v[0];p->damaged=v[1]!=0;p->low=v[2]==2?2:0;p->lastDamage=(int)v[3];
   for(int n=0;n<4;++n)p->cooldown[n]=(int)v[4+n];
  }
 }

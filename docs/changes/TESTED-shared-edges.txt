@@ -1,0 +1,9 @@
+Shared wall edge fix - 2026-10-19
+Engine-wide change; no map or save-specific geometry patches.
+Compatible adjoining faces share their crater endpoint depth instead of forcibly tapering every endpoint back to intact wall.
+Angled adjoining faces use a shared mitered world position. Collinear breaches can continue across split source/exit faces without a mesh seam or collision post.
+Original room/backing-sector identity is retained; unrelated boundaries and outside-map seals are not removed. This is not general arbitrary-volume CSG.
+Neighbor edits invalidate affected source/exit meshes. Adjacency is cached per map.
+Synthetic SplitWallTest: partial-crater depth and shared vertex agreement for collinear and right-angle edges; completed seam aperture; ray passage and actual two-way walking across the shared vertex passed. Visual screenshot inspected.
+STUCKWEIRD and UNDERLVL recovery movement, floor/ceiling surfaces, barrels, liquid exclusion, floor-driven door, 4096-unit breach and save/load regressions passed.
+Packaged DERP-Destruction-Seams.exe, including all preceding fixes and bundled mods. Production build and user saves unchanged.

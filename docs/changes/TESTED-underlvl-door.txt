@@ -1,0 +1,9 @@
+Under-level recovery and floor-backed doors - 2026-10-19
+UNDERLVL, E2M1: actor saved in closed backing sector44 at z=-120, floor about-65 and ceiling-64. Insufficient original sector clearance caused the ceiling clamp to push the player underfloor.
+Supplemental crater collision now accepts the actual backing sector as well as source sector. Stationary flat support refresh no longer adopts height results from a failed position check.
+Guarded recovery for players trapped below a closed backing sector finds the nearby mouth of a damaged face, at most80units inside it; normal position collision and vertical clearance must validate destination. Original saves remain unchanged; recovery occurs while playing.
+UNDERLVL recovered from (858.555,-1182.336,-120) to (858.555,-1134,-64). Eight-direction actual movement and return passed.
+DOORWONTOPEN, E3M1: line91/109 is a 32-unit floor-backed lift/barrier, rather than a ceiling-backed door. Breach topology now supports both anchor planes and uses the correct side of the moving plane for normal openings.
+Existing saved damage now produces a valid breach. Additional impacts and two-way walking checked after removing the live monster behind the door in the isolated test only.
+Regression: STUCKWEIRD eight-direction movement, floor/ceiling/rocket/barrel/liquid exclusions, moving door save/load, standard locked ceiling-door breach and two-way passage passed.
+Ready build DERP-Destruction-Recovery.exe includes Toasty5%, enemy-only Close call and prior destruction features.

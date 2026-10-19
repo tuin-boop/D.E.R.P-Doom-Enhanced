@@ -1,0 +1,18 @@
+Passage repair - 2026-10-19
+Engine-wide changes, verified on a copy of save 5 (E2M1):
+- Finite breaches no longer force intact strips at perpendicular/end boundaries. Coplanar joins retain matching mesh depths.
+- Ground actors can step over fractured sills within the normal 24-unit step limit. Airborne actors and missiles do not receive invented support.
+- Exact source-plane positions use the breached room heights rather than a closed backing sector.
+- Closed breached slabs do not draw their coincident ceiling across the floor; supporting room floor material and light are used.
+
+Validation:
+Save 5 existing damage: two-way walking with no added shots, screenshot visually checked.
+Shared edges: angled/coplanar geometry, rays and two-way passage passed.
+Surfaces: floor/ceiling, liquids, barrel impacts, moving surfaces checks passed.
+STUCKWEIRD and UNDERLVL saved-player movement checks passed.
+DOORWONTOPEN floor-backed door passage passed.
+4096-unit fixture: toggle, sight, hitscan, rocket, save/load, two-way walking passed.
+Original user saves were not modified.
+
+Ready launcher: DERP-Destruction-Passage.exe. All three bundled Fluid mods included.
+This remains the separate destruction prototype; the stable build is unchanged.

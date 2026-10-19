@@ -185,15 +185,17 @@ static void flatGeometry(const std::vector<float> &skyTop) {
         const auto &poly=floors[i]; if(poly.size()<3) continue;
         const sector_t *sector=subsectors[i].sector;
         if(digMeshEnabled()&&sector->tag==19001)continue;
+        int support=P_GlobalDigBreachSupportRoom(int(sector-sectors));
         for(int ceiling=0;ceiling<2;++ceiling) {
-            int flat=ceiling?sector->ceilingpic:sector->floorpic;
+            if(ceiling&&support>=0)continue;
+            int flat=ceiling?sector->ceilingpic:support>=0?sectors[support].floorpic:sector->floorpic;
             if(flat==skyflatnum) {
                 float z=ceiling?skyTop[sector-sectors]:floorZ(sector);
                 for(size_t n=1;n+1<poly.size();++n) for(Point p:{poly[0],poly[n],poly[n+1]}) skyVertices.push_back({p.x,p.y,z});
                 continue;
             }
             int lump=firstflat+flattranslation[flat]; lumpImage(lump,true);
-            float z=sectorHeight(sector,ceiling),light=lighting(sector);
+            float z=sectorHeight(sector,ceiling),light=lighting(support>=0?&sectors[support]:sector);
             // MODE_MIRROR_FLOOR: this floor samples the mirrored pass.
             unsigned mirror=reflectionActive&&!ceiling&&sectorMist[sector-sectors].reflective&&std::abs(z-reflectionPlane)<0.5f?MODE_MIRROR_FLOOR:0;
             if(!ceiling&&sectorMist[sector-sectors].liquid)mirror|=MODE_LIQUID;

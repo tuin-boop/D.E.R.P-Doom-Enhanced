@@ -13,7 +13,7 @@ int P_PopNotice(int player,noticeevent_t* event);
 void P_NoticeNewGame(void);
 void P_NoticeLevel(void);
 void P_NoticeWeapon(player_t* player,int weapon);
-void P_NoticeDamage(player_t* player,int damage);
+void P_NoticeDamage(player_t* player,int damage,mobj_t* source);
 void P_NoticeKill(mobj_t* source,mobj_t* target,mobj_t* inflictor);
 void P_NoticeTick(player_t* player);
 void P_NoticeExit(int secret);

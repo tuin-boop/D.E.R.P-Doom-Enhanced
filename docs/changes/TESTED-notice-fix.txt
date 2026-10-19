@@ -1,0 +1,7 @@
+Toasty and Close call - 2026-10-19
+Toasty gib roll changed from 1/10 to unbiased 1/20 (5%), rejecting the first 16 uint32 values before modulo20. Separate cosmetic RNG preserved.
+Close call now requires enemy-attributed damage leaving player alive below10 HP. Self/environment damage cannot arm it. Still waits5 seconds without damage and no nearby visible targeting enemies; pending messages expire after20 seconds.
+Legacy unattributed pending flags cleared on load, while newly attributed flags retain save compatibility using existing field value2.
+Native regression checks genuine enemy near-death, self damage, environment damage, expiry and legacy save flag.
+Full native gameplay/weapon/effect/save-load/level-change smoke passed.
+Packaged DERP-Destruction-Updated.exe includes prior stuckweird fix, barrel craters and4096-unit digging.

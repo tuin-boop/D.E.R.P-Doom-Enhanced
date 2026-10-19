@@ -35,6 +35,7 @@ rcsid[] = "$Id: p_enemy.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 
 #include "doomdef.h"
 #include "p_local.h"
+#include "p_digwall.h"
 #include "p_fluid.h"
 
 #include "s_sound.h"
@@ -1670,6 +1671,7 @@ void A_Fall (mobj_t *actor)
 //
 void A_Explode (mobj_t* thingy)
 {
+    if(thingy->type==MT_BARREL)P_GlobalDigBarrelBlast(thingy);
     P_RadiusAttack ( thingy, thingy->target, 128 );
 }
 

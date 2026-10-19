@@ -59,8 +59,18 @@ static void test_notices(void){
     if(P_PopNotice(0,&e))I_Error("Combat notice cooldown");
     p->readyweapon=wp_fist;P_NoticeKill(p->mo,&target,p->mo);
     if(notice_count(N_FISTS)!=1)I_Error("Tough fist kill notice");
-    P_NoticeLevel();p->health=5;P_NoticeDamage(p,1);leveltime=((leveltime/35)+6)*35;
+    P_NoticeLevel();p->health=5;P_NoticeDamage(p,1,&target);leveltime=((leveltime/35)+6)*35;
     P_NoticeTick(p);if(notice_count(N_CLOSE)!=1)I_Error("Close call after combat");
+    P_NoticeLevel();P_NoticeDamage(p,1,p->mo);leveltime=((leveltime/35)+6)*35;
+    P_NoticeTick(p);if(notice_count(N_CLOSE))I_Error("Self damage triggered close call");
+    P_NoticeLevel();P_NoticeDamage(p,1,NULL);leveltime=((leveltime/35)+6)*35;
+    P_NoticeTick(p);if(notice_count(N_CLOSE))I_Error("Environmental damage triggered close call");
+    P_NoticeLevel();P_NoticeDamage(p,1,&target);leveltime=((leveltime/35)+22)*35;
+    P_NoticeTick(p);if(notice_count(N_CLOSE))I_Error("Stale enemy damage triggered close call");
+    P_NoticeLevel();P_NoticeDamage(p,1,&target);P_SaveNotices(saved);
+    saved[16]=1; // Old unattributed low-health flag in the first player's record.
+    P_LoadNotices(saved,sizeof(saved));leveltime=((leveltime/35)+6)*35;
+    P_NoticeTick(p);if(notice_count(N_CLOSE))I_Error("Legacy pending close call replayed");
     p->health=oldhealth;p->killcount=oldkills;p->readyweapon=oldweapon;leveltime=oldtime;
     P_NoticeNewGame();P_NoticeLevel();
     puts("Special notices: variants, save persistence, boss hooks, combat grouping and cooldown passed.");
@@ -666,6 +676,20 @@ static void test_surfaces(void){
     if(gamestate!=GS_LEVEL||gametic<5)return;
     if(!phase){
         player=players[0].mo;players[0].cheats|=CF_GODMODE;x=player->x/(float)FRACUNIT;y=player->y/(float)FRACUNIT;sector=(int)(player->subsector->sector-sectors);
+        // Exercise the actual barrel explosion action, including the master toggle.
+        mobj_t *barrel=P_SpawnMobj(player->x,player->y,player->floorz,MT_BARREL);
+        barrel->target=player;
+        P_GlobalDigReset();
+        P_SetMobjState(barrel,S_BEXP4);
+        float barrelDepth=P_GlobalDigFlatDepth(sector,0,x,y);
+        if(barrelDepth<=0)I_Error("Barrel explosion did not crater nearby floor");
+        P_RemoveMobj(barrel);P_GlobalDigReset();
+        extern int p_breakablewalls;int savedBreakable=p_breakablewalls;p_breakablewalls=0;
+        barrel=P_SpawnMobj(player->x,player->y,player->floorz,MT_BARREL);
+        unsigned barrelRevision=P_GlobalDigRevision();P_SetMobjState(barrel,S_BEXP4);
+        if(P_GlobalDigRevision()!=barrelRevision)I_Error("Disabled destruction still craters barrel explosion");
+        P_RemoveMobj(barrel);p_breakablewalls=savedBreakable;
+        puts("Barrel explosion action: floor crater and disabled toggle passed.");
         // Actor-contact explosions must damage nearby floors, not remote ones.
         mobj_t splash=*player;splash.type=MT_ROCKET;splash.height=8*FRACUNIT;splash.z=player->floorz+20*FRACUNIT;
         P_GlobalDigMonsterContact(&splash,player->x,player->y);P_GlobalDigImpact(&splash);
@@ -689,6 +713,11 @@ static void test_surfaces(void){
             splash.z=l->frontsector->floorheight+28*FRACUNIT;
             P_GlobalDigMonsterContact(&splash,splash.x,splash.y);P_GlobalDigImpact(&splash);
             if(P_GlobalDigDepth(i,0,len*.5f,splash.z/(float)FRACUNIT+4)<=0)I_Error("Monster splash missed nearby wall");
+            P_GlobalDigReset();
+            barrel=P_SpawnMobj(splash.x,splash.y,splash.z+4*FRACUNIT-mobjinfo[MT_BARREL].height/2,MT_BARREL);
+            P_SetMobjState(barrel,S_BEXP4);
+            if(P_GlobalDigDepth(i,0,len*.5f,splash.z/(float)FRACUNIT+4)<=0)I_Error("Barrel explosion missed nearby wall");
+            P_RemoveMobj(barrel);
             ++splashWall;
         }
         if(!splashWall)I_Error("No monster wall splash tested");P_GlobalDigReset();
@@ -873,6 +902,96 @@ void I_TestFrame(void)
         }return;
     }
 
+    if(getenv("DOOM_TEST_PLAYER_STUCK")){
+        if(gamestate!=GS_LEVEL||!players[0].mo||gametic<2)return;
+        mobj_t *m=players[0].mo;extern int p_breakablewalls;
+        printf("PLAYER map=%d pos=%.3f %.3f %.3f floor=%.3f ceil=%.3f sector=%d radius=%.1f height=%.1f dig=%d through=%d deep=%d\n",gamemap,m->x/(double)FRACUNIT,m->y/(double)FRACUNIT,m->z/(double)FRACUNIT,m->floorz/(double)FRACUNIT,m->ceilingz/(double)FRACUNIT,(int)(m->subsector->sector-sectors),m->radius/(double)FRACUNIT,m->height/(double)FRACUNIT,p_breakablewalls,p_throughwalls,p_deeperdig);
+        for(int off=0;off<2;++off){
+            int saved=p_breakablewalls;if(off)p_breakablewalls=0;
+            for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){
+                int owner=-1;fixed_t x=m->x+dx*4*FRACUNIT,y=m->y+dy*4*FRACUNIT;
+                int dig=P_GlobalDigPosition(m,x,y,&owner),fit=P_CheckPosition(m,x,y);
+                printf("PROBE off=%d dir=%d,%d dig=%d owner=%d fit=%d\n",off,dx,dy,dig,owner,fit);
+            }p_breakablewalls=saved;
+        }
+        fixed_t sx=m->x,sy=m->y;
+        for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){
+            if(!P_TryMove(m,sx+dx*4*FRACUNIT,sy+dy*4*FRACUNIT)||!P_TryMove(m,sx,sy))I_Error("Saved player cannot move and return in direction %d,%d",dx,dy);
+        }
+        puts("Stuck save: all eight directions and return passed with destruction enabled.");
+        I_Render3DScreenshotTo("stuck-player.png");I_Quit();return;
+    }
+    if(getenv("DOOM_TEST_SHARED_EDGES")){
+        static int capture=0;
+        if(gamestate!=GS_LEVEL||!players[0].mo||gametic<12)return;
+        if(capture){if(gametic<capture)return;I_Render3DScreenshotTo("shared-edge.png");I_Quit();return;}
+        p_throughwalls=1;p_deeperdig=0;P_GlobalDigReset();
+        global_hit(1,0,248,48);
+        float ca=P_GlobalDigDepth(1,0,256,48),cb=P_GlobalDigDepth(2,0,0,48),cx,cy,dx,dy;
+        P_GlobalDigWallPoint(1,0,256,48,ca,&cx,&cy);P_GlobalDigWallPoint(2,0,0,48,cb,&dx,&dy);
+        if(ca<=0||fabsf(ca-cb)>.001f||hypotf(cx-dx,cy-dy)>.001f)I_Error("Angled crater join leaves a seam");
+        P_GlobalDigReset();global_hit(2,0,120,48);
+        float a=P_GlobalDigDepth(2,0,128,48),b=P_GlobalDigDepth(3,0,0,48);
+        if(a<=0||fabsf(a-b)>.001f)I_Error("Joined wall depth mismatch: %f %f",a,b);
+        float ax,ay,bx,by;P_GlobalDigWallPoint(2,0,128,48,a,&ax,&ay);P_GlobalDigWallPoint(3,0,0,48,b,&bx,&by);
+        if(hypotf(ax-bx,ay-by)>.001f)I_Error("Joined wall vertex mismatch");
+        for(int n=0;n<40;++n)for(int u=96;u<=160;u+=16)for(int z=0;z<=80;z+=16)global_hit(u<128?2:3,0,u<128?u:u-128,z);
+        if(P_GlobalDigBreachMargin(2,0,128,32)<=0||P_GlobalDigBreachMargin(3,0,0,32)<=0)I_Error("Breach retained split wall post");
+        if(!P_GlobalDigBreachRay(2,256,128,32,1,0,0)||!P_GlobalDigBreachRay(5,320,128,32,-1,0,0))I_Error("Split wall blocks shot");
+        mobj_t *m=players[0].mo;
+        P_UnsetThingPosition(m);m->x=232*FRACUNIT;m->y=128*FRACUNIT;m->z=0;P_SetThingPosition(m);m->floorz=0;m->ceilingz=128*FRACUNIT;
+        for(int x=232;x<=344;x+=2)if(!P_TryMove(m,x*FRACUNIT,128*FRACUNIT))I_Error("Split wall blocks body at %d",x);
+        for(int x=344;x>=232;x-=2)if(!P_TryMove(m,x*FRACUNIT,128*FRACUNIT))I_Error("Split wall blocks reverse body at %d",x);
+        m->angle=0;players[0].viewz=41*FRACUNIT;I_Render3DScreenshotTo("shared-edge.png");
+        puts("Shared wall edges: angled and coplanar mesh vertices, removed seam, shots and two-way walking passed.");capture=gametic+4;return;
+    }
+    if(getenv("DOOM_TEST_SAVE5")){
+        static int capture;
+        if(gamestate!=GS_LEVEL||!players[0].mo||gametic<12)return;
+        if(capture){if(gametic<capture)return;if(capture>0){I_Render3DScreenshotTo("save5-passage.png");capture=-1;return;}I_Quit();return;}
+        mobj_t *m=players[0].mo;fixed_t sx=m->x,sy=m->y,sz=m->z;
+        if(gameepisode!=2||gamemap!=1)I_Error("Wrong save 5 fixture");
+        for(int y=(int)(sy/FRACUNIT);y>=-1240;y-=2){
+            if(!P_TryMove(m,sx,y*FRACUNIT))I_Error("Save 5 passage blocked at %d",y);
+            m->z=m->floorz;
+        }
+        for(int y=-1240;y<=(int)(sy/FRACUNIT);y+=2){
+            if(!P_TryMove(m,sx,y*FRACUNIT))I_Error("Save 5 reverse passage blocked at %d",y);
+            m->z=m->floorz;
+        }
+        if(!P_TryMove(m,sx,sy))I_Error("Save 5 return blocked");
+        m->z=sz;players[0].viewz=sz+VIEWHEIGHT;
+        puts("Save 5: existing damage permits two-way walking without adding impacts.");
+        capture=gametic+4;return;
+    }
+    if(getenv("DOOM_TEST_DOOR_SAVE")){
+        if(gamestate!=GS_LEVEL||!players[0].mo||gametic<2)return;
+        mobj_t *m=players[0].mo;double angle=m->angle*(6.283185307179586/4294967296.0),vx=cos(angle),vy=sin(angle),x=m->x/(double)FRACUNIT,y=m->y/(double)FRACUNIT;
+        printf("DOORPLAYER episode=%d map=%d pos=%.1f %.1f %.1f angle=%.2f breach=%d\n",gameepisode,gamemap,x,y,m->z/(double)FRACUNIT,angle,p_breachdoors);
+        for(int i=0;i<numlines;++i){line_t *l=&lines[i];double ax=l->v1->x/(double)FRACUNIT,ay=l->v1->y/(double)FRACUNIT,dx=l->dx/(double)FRACUNIT,dy=l->dy/(double)FRACUNIT,det=vx*dy-vy*dx;
+            if(fabs(det)<.001)continue;
+            double t=((ax-x)*dy-(ay-y)*dx)/det,u=((ax-x)*vy-(ay-y)*vx)/det;
+            if(t<0||t>512||u<0||u>1)continue;
+            printf("DOORLINE id=%d dist=%.1f u=%.1f front=%d back=%d heights=%.1f/%.1f %.1f/%.1f limit=%.1f margin=%.1f\n",i,t,u*hypot(dx,dy),l->frontsector?(int)(l->frontsector-sectors):-1,l->backsector?(int)(l->backsector-sectors):-1,l->frontsector?l->frontsector->floorheight/(double)FRACUNIT:0,l->frontsector?l->frontsector->ceilingheight/(double)FRACUNIT:0,l->backsector?l->backsector->floorheight/(double)FRACUNIT:0,l->backsector?l->backsector->ceilingheight/(double)FRACUNIT:0,P_GlobalDigBreachLimit(i,0,u*hypot(dx,dy),m->z/(float)FRACUNIT+32),P_GlobalDigBreachMargin(i,0,u*hypot(dx,dy),m->z/(float)FRACUNIT+32));
+        }
+        if(getenv("DOOM_TEST_DOOR_REPAIR")){
+            extern fixed_t tmdropoffz;
+            // Isolate geometry from the live monster waiting beyond the saved door.
+            for(thinker_t *th=thinkercap.next,*next;th!=&thinkercap;th=next){
+                next=th->next;if(th->function.acp1!=(actionf_p1)P_MobjThinker)continue;
+                mobj_t *q=(mobj_t*)th;if(q!=m&&(q->flags&MF_COUNTKILL))P_RemoveMobj(q);
+            }
+            if(gameepisode!=3||gamemap!=1)I_Error("Wrong door fixture");
+            for(int n=0;n<32;++n)for(int u=32;u<=96;u+=16)for(int h=0;h<=64;h+=16)global_hit(91,0,u,h);
+            if(!P_GlobalDigBreachRay(91,448,64,32,0,1,0))I_Error("Floor-backed door still blocks breach ray");
+            P_UnsetThingPosition(m);m->x=448*FRACUNIT;m->y=40*FRACUNIT;m->z=0;P_SetThingPosition(m);
+            m->floorz=0;m->ceilingz=128*FRACUNIT;
+            for(int y=40;y<=120;y+=2)if(!P_TryMove(m,448*FRACUNIT,y*FRACUNIT))I_Error("Floor-backed door blocks walking at %d floor %.1f ceil %.1f drop %.1f",y,tmfloorz/(double)FRACUNIT,tmceilingz/(double)FRACUNIT,tmdropoffz/(double)FRACUNIT);
+            for(int y=120;y>=40;y-=2)if(!P_TryMove(m,448*FRACUNIT,y*FRACUNIT))I_Error("Floor-backed door blocks reverse walking at %d",y);
+            puts("Saved floor-backed door: impact excavation, breach ray and two-way player passage passed.");
+        }
+        I_Render3DScreenshotTo("door-save.png");I_Quit();return;
+    }
     if(getenv("DOOM_TEST_SEAMS_SAVE")){
         static int phase;
         if(gamestate!=GS_LEVEL||!players[0].mo||gametic<12)return;
