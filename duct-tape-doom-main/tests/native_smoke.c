@@ -914,6 +914,13 @@ void I_TestFrame(void)
                 printf("PROBE off=%d dir=%d,%d dig=%d owner=%d fit=%d\n",off,dx,dy,dig,owner,fit);
             }p_breakablewalls=saved;
         }
+        if(getenv("DOOM_TEST_LEDGE")){
+            if(P_TryMove(m,m->x,m->y+4*FRACUNIT))I_Error("Ledge permits deeper wall penetration");
+            fixed_t x=m->x,y=m->y;
+            for(int n=1;n<=12;++n)if(!P_TryMove(m,x,y-n*4*FRACUNIT))I_Error("Ledge blocks outward retreat at %d",n);
+            if(!P_TryMove(m,m->x+4*FRACUNIT,m->y)||!P_TryMove(m,m->x-8*FRACUNIT,m->y))I_Error("Movement remains stuck after retreat");
+            puts("Ledge save: deeper penetration rejected; outward retreat and free movement passed.");I_Quit();return;
+        }
         fixed_t sx=m->x,sy=m->y;
         for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){
             if(!P_TryMove(m,sx+dx*4*FRACUNIT,sy+dy*4*FRACUNIT)||!P_TryMove(m,sx,sy))I_Error("Saved player cannot move and return in direction %d,%d",dx,dy);

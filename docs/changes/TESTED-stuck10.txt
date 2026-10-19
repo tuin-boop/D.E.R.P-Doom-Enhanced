@@ -1,0 +1,14 @@
+STUCK10 ledge retreat - 2026-10-19
+Reproduced on a copy of STUCK10, map 4, sector 95, damaged line 405.
+The player landed beside a 64-unit ledge with their radius overlapping its lower wall.
+Supplemental excavation collision rejected every small move, including outward retreat.
+
+Engine-wide repair: an already-overlapping player may move outward into the same front room.
+Movement into the wall remains blocked. Endpoint, room ownership and existing-overlap checks limit the exception.
+Both supplemental crater checks and the original line check apply the same retreat rule.
+
+Validation: STUCK10 rejects movement deeper into the wall, permits 48 units of outward retreat,
+and permits lateral movement afterward. STUCKWEIRD, UNDERLVL, save 5 two-way passage,
+DOORWONTOPEN and shared-edge geometry/passage regression tests passed.
+Original saves unchanged. No noclip, teleport, or god mode added.
+Ready build: DERP-Destruction-Ledge.exe, all three Fluid mods bundled.

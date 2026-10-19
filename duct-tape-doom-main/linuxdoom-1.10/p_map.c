@@ -217,7 +217,7 @@ boolean PIT_CheckLine (line_t* ld)
 	return true;
 		
     if(P_GlobalDigEnabled()){
-        for(int side=0;side<2;++side)if(ld->sidenum[side]>=0&&P_GlobalDigFit((int)(ld-lines),side,tmthing,tmx,tmy))return true;
+        for(int side=0;side<2;++side)if(ld->sidenum[side]>=0&&(P_GlobalDigFit((int)(ld-lines),side,tmthing,tmx,tmy)||P_GlobalDigRetreat((int)(ld-lines),side,tmthing,tmx,tmy)))return true;
     }
     // A line has been hit
     
@@ -1516,4 +1516,3 @@ P_ChangeSector
 	
     return nofit;
 }
-

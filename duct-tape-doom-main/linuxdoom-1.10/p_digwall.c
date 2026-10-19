@@ -292,6 +292,24 @@ int P_GlobalDigFit(int line,int side,mobj_t *thing,fixed_t x,fixed_t y){
         }
     }return 1;
 }
+// A player may fall beside a ledge while their radius still overlaps it.
+// Permit only outward motion from an existing overlap, never entry into solid.
+int P_GlobalDigRetreat(int line,int side,mobj_t *thing,fixed_t x,fixed_t y){
+    if(!thing->player||!P_GlobalDigEnabled())return 0;
+    float bounds[4];if(!P_GlobalDigBounds(line,side,bounds))return 0;
+    sector_t *room=side?lines[line].backsector:lines[line].frontsector;
+    if(!room||!thing->subsector||thing->subsector->sector!=room)return 0;
+    double ax,ay,tx,ty,len=frame(line,side,&ax,&ay,&tx,&ty);
+    double u=(unit(thing->x)-ax)*tx+(unit(thing->y)-ay)*ty;
+    double oldd=-(unit(thing->x)-ax)*ty+(unit(thing->y)-ay)*tx;
+    double next=-(unit(x)-ax)*ty+(unit(y)-ay)*tx;
+    double radius=unit(thing->radius)*(fabs(tx)+fabs(ty));
+    if(u<radius||u>len-radius||oldd>1||oldd+radius<=0||next>=oldd-.00001)return 0;
+    // Keep the retreat inside the same face; other faces retain their checks.
+    double newu=(unit(x)-ax)*tx+(unit(y)-ay)*ty;
+    if(newu<radius||newu>len-radius)return 0;
+    return !P_GlobalDigFit(line,side,thing,thing->x,thing->y);
+}
 /* Supplemental checks remain active after the actor has crossed the old
  * plane. The original room's heights provide floor/ceiling in the recess. */
 int P_GlobalDigPosition(mobj_t *thing,fixed_t x,fixed_t y,int *owner){
@@ -314,7 +332,7 @@ int P_GlobalDigPosition(mobj_t *thing,fixed_t x,fixed_t y,int *owner){
         // its crater must not impose collision on that unrelated space.
         if(exitDepth<=0&&d>0&&nextWallBoundary(c->line,c->side,(float)u,d+.01)<d-.01)continue;
         captureContact=1;int fit=P_GlobalDigFit(c->line,c->side,thing,x,y);captureContact=0;
-        if(!fit)return 0;
+        if(!fit){if(P_GlobalDigRetreat(c->line,c->side,thing,x,y))continue;return 0;}
         if(d>=0){sector_t *s=c->side?lines[c->line].backsector:lines[c->line].frontsector;
             if(exitDepth>0){int other=P_GlobalDigBreachSector(c->line,0,0,(float)-ty,(float)tx);if(other>=0&&sectors[other].floorheight>s->floorheight)s=&sectors[other];}
             *owner=(int)(s-sectors);

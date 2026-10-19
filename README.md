@@ -2,7 +2,7 @@
 
 A customized Windows build based on **Duct-Tape DOOM**, retaining its renderer and adding native Fluid Weapons/FluidMonsters support, performance improvements, a modern HUD, and gameplay presentation features.
 
-**[Download the destruction prototype](https://github.com/tuin-boop/D.E.R.P-Doom-Enhanced/releases/tag/destruction-2026.10.19-passage)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
+**[Download the destruction prototype](https://github.com/tuin-boop/D.E.R.P-Doom-Enhanced/releases/tag/destruction-2026.10.19-ledge)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
 
 ![Launcher artwork](launcher/hero.png)
 
@@ -20,6 +20,8 @@ The Windows launcher includes the engine and the supplied FluidWeapons, FluidWea
 This branch contains the separate **destruction prototype**. Rockets excavate walls, floors and ceilings; optional wall and door breaches allow passage into valid rooms. The wall damage slider ranges from 100–500%, and optional deeper digging extends the depth limit from 256 to 4,096 units. See the [prototype notes and limitations](docs/changes/DESTRUCTION-2026-10-19.md).
 
 The latest update removes artificial breach frames, fixes two-way passage over fractured sills, repairs closed-door floor rendering, and adds barrel blast craters. It also includes stuck-player recovery, a 5% Toasty chance, and corrected Close Call triggers. See the [update notes](docs/changes/DESTRUCTION-PASSAGE-2026-10-19.md).
+
+The ledge update also fixes players getting trapped after dropping beside a damaged ledge: existing overlaps permit outward retreat while movement farther into the wall stays blocked.
 
 The stable release remains available separately. Door breaches can bypass keys and break map progression.
 
