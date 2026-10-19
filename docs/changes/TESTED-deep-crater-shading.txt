@@ -1,0 +1,10 @@
+Deep crater shading fix (2026-10-19)
+
+Reproduced the dark steep facets using the user's SEAMS save, copied to test-seams without modifying the original.
+Excavated floor/ceiling triangles now retain their parent plane for sector/baked-light lookup. Actual facet normals remain in use for surface and dynamic lighting.
+Before: test-seams/seams-before.png
+After: test-seams/seams.png
+Release engine and GPU smoke targets built successfully.
+Surface regression suite passed (exit 0): test-surfaces/seams-regression.log.
+Packaged DERP-Destruction.exe with the rebuilt engine and all three bundled mods; updated DiggingEngine.exe.
+Main production executable unchanged.

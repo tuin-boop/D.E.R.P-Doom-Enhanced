@@ -27,4 +27,5 @@
 #define FEATURE_CLASSIC_FLASHLIGHT 524288u // the flashlight raises light like extralight, in steps
 #define FEATURE_STIPPLED_SHADOWS   1048576u // flashlight shadow edges break into an ordered-dither stipple
 
+#define FEATURE_GLOW_EDGES 2097152u
 #endif

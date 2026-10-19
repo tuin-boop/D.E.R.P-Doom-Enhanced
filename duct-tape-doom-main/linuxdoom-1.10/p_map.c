@@ -35,6 +35,7 @@ rcsid[] = "$Id: p_map.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 
 #include "doomdef.h"
 #include "p_local.h"
+#include "p_digwall.h"
 
 #include "s_sound.h"
 
@@ -215,6 +216,9 @@ boolean PIT_CheckLine (line_t* ld)
     if (P_BoxOnLineSide (tmbbox, ld) != -1)
 	return true;
 		
+    if(P_GlobalDigEnabled()){
+        for(int side=0;side<2;++side)if(ld->sidenum[side]>=0&&P_GlobalDigFit((int)(ld-lines),side,tmthing,tmx,tmy))return true;
+    }
     // A line has been hit
     
     // The moving thing's destination position will cross
@@ -346,6 +350,8 @@ boolean PIT_CheckThing (mobj_t* thing)
 	    return !(thing->flags & MF_SOLID);	
 	}
 	
+	// Record the actual actor impact for nearby surface blast damage.
+        P_GlobalDigMonsterContact(tmthing,tmx,tmy);
 	// damage / explode
 	damage = ((P_Random()%8)+1)*tmthing->info->damage;
 	P_DamageMobj (thing, tmthing, tmthing->target, damage);
@@ -454,6 +460,12 @@ P_CheckPosition
     if ( tmflags & MF_NOCLIP )
 	return true;
     
+    {int owner=-1;
+        if(!P_GlobalDigPosition(thing,x,y,&owner))return false;
+        if(owner>=0){tmfloorz=tmdropoffz=sectors[owner].floorheight;tmceilingz=sectors[owner].ceilingheight;}
+    }
+    P_GlobalDigFlatHeights(thing,x,y,(int)(newsubsec->sector-sectors),&tmfloorz,&tmceilingz);
+    tmdropoffz=tmfloorz;
     // Check things first, possibly picking things up.
     // The bounding box is extended by MAXRADIUS
     // because mobj_ts are grouped into mapblocks
@@ -899,7 +911,12 @@ PTR_AimTraverse (intercept_t* in)
     if (in->isaline)
     {
 	li = in->d.line;
-	
+        if(P_GlobalDigBreachRay((int)(li-lines),
+            (trace.x+FixedMul(trace.dx,in->frac))/(float)FRACUNIT,
+            (trace.y+FixedMul(trace.dy,in->frac))/(float)FRACUNIT,shootz/(float)FRACUNIT,
+            trace.dx/(float)FRACUNIT,trace.dy/(float)FRACUNIT,0)){
+            bottomslope=0;topslope=1;return true;
+        }
 	if ( !(li->flags & ML_TWOSIDED) )
 	    return false;		// stop
 	
@@ -974,6 +991,9 @@ PTR_AimTraverse (intercept_t* in)
 // already left la_sector, the sector it is passing through, vertically.
 // Returns false when it did.
 //
+void (*P_ShotTraced)(mobj_t *shooter,mobj_t *hit,fixed_t x1,fixed_t y1,fixed_t z1,fixed_t x2,fixed_t y2,fixed_t z2);
+static fixed_t la_endfrac;
+static mobj_t *la_hit;
 boolean		la_freeaim;
 static sector_t* la_sector;
 
@@ -1002,6 +1022,7 @@ static boolean PTR_ShootPlane (fixed_t frac)
 	dist = 0;
     if (dist < FixedMul (frac, attackrange))
 	frac = FixedDiv (dist, attackrange);
+    la_endfrac=frac;
     x = trace.x + FixedMul (trace.dx, frac);
     y = trace.y + FixedMul (trace.dy, frac);
     z = ceiling ? plane - 4*FRACUNIT : plane;
@@ -1034,12 +1055,24 @@ boolean PTR_ShootTraverse (intercept_t* in)
     if (la_freeaim && !PTR_ShootPlane (in->frac))
 	return false;
 
+    la_endfrac=in->frac;
     if (in->isaline)
     {
 	li = in->d.line;
 	
 	if (li->special)
 	    P_ShootSpecialLine (shootthing, li);
+        dist=FixedMul(attackrange,in->frac);
+        if(P_GlobalDigBreachRay((int)(li-lines),
+            (trace.x+FixedMul(trace.dx,in->frac))/(float)FRACUNIT,
+            (trace.y+FixedMul(trace.dy,in->frac))/(float)FRACUNIT,
+            (shootz+FixedMul(aimslope,dist))/(float)FRACUNIT,
+            trace.dx/(float)FRACUNIT,trace.dy/(float)FRACUNIT,
+            FixedMul(aimslope,attackrange)/(float)FRACUNIT)){
+            if(la_freeaim){int room=P_GlobalDigBreachSector((int)(li-lines),0,0,trace.dx/(float)FRACUNIT,trace.dy/(float)FRACUNIT);if(room>=0)la_sector=&sectors[room];}
+            return true;
+        }
+
 
 	if ( !(li->flags & ML_TWOSIDED) )
 	    goto hitline;
@@ -1139,9 +1172,10 @@ boolean PTR_ShootTraverse (intercept_t* in)
     {
 	P_SpawnBlood (x,y,z, la_damage);
 	if (R_BloodHit)
-	    R_BloodHit (th, x, y, z, trace.dx, trace.dy, la_damage);
+	    R_BloodHit (th, x, y, z, trace.dx, trace.dy, la_damage, aimslope, shootthing);
     }
 
+    la_hit=th;
     if (la_damage)
 	P_DamageMobj (th, shootthing, shootthing, la_damage);
 
@@ -1220,13 +1254,14 @@ P_LineAttack
 	la_sector = t1->subsector->sector;
     }
 		
+    la_hit=NULL;la_endfrac=FRACUNIT;
     if (P_PathTraverse ( t1->x, t1->y,
 			 x2, y2,
 			 PT_ADDLINES|PT_ADDTHINGS,
-			 PTR_ShootTraverse )
-	&& la_freeaim)
-	PTR_ShootPlane (FRACUNIT);
+			 PTR_ShootTraverse ))
+    {la_endfrac=FRACUNIT;if(la_freeaim)PTR_ShootPlane(FRACUNIT);}
     la_freeaim = false;
+    if(P_ShotTraced&&damage)P_ShotTraced(t1,la_hit,t1->x,t1->y,shootz,t1->x+FixedMul(x2-t1->x,la_endfrac),t1->y+FixedMul(y2-t1->y,la_endfrac),shootz+FixedMul(aimslope,FixedMul(la_endfrac,attackrange)));
 }
  
 

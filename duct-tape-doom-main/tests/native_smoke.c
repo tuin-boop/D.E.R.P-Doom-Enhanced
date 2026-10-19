@@ -15,6 +15,7 @@
 #include "s_sound.h"
 #include "sounds.h"
 #include "p_local.h"
+#include "p_digwall.h"
 #include "p_fluid.h"
 #include "p_notices.h"
 #include "m_bbox.h"
@@ -108,10 +109,13 @@ static void test_fast_pistol(void){
     p->readyweapon=wp_pistol;P_SetupPsprites(p);
     puts("Pistol: optional 10-tic fast and 14-tic normal firing cadence passed.");
 }
-static int aggressiveShotsCount,aggressiveShotTimes[8];
+static int aggressiveShotsCount,aggressiveShotTimes[16],aggressiveShotHits[16];
 static mobj_t *aggressiveTestActor;
 static void aggressive_flash(mobj_t *actor,int weapon,int projectile){
-    if(actor==aggressiveTestActor&&aggressiveShotsCount<8)aggressiveShotTimes[aggressiveShotsCount++]=leveltime;
+    if(actor==aggressiveTestActor&&aggressiveShotsCount<16)aggressiveShotTimes[aggressiveShotsCount++]=leveltime;
+}
+static void aggressive_contact(mobj_t *target,mobj_t *inflictor,mobj_t *source,int damage){
+    if(source==aggressiveTestActor&&target==players[0].mo&&aggressiveShotsCount>0)aggressiveShotHits[aggressiveShotsCount-1]=1;
 }
 static void test_aggressive_ai(void){
     extern int p_fluidfastpistol;
@@ -121,6 +125,7 @@ static void test_aggressive_ai(void){
     player_t *player=&players[0];mobj_t *target=player->mo;
     int cheats=player->cheats;fixed_t mx=target->momx,my=target->momy;
     void (*flash)(mobj_t*,int,int)=R_MuzzleFlash;
+    void (*damageHook)(mobj_t*,mobj_t*,mobj_t*,int)=R_DamageHit;R_DamageHit=aggressive_contact;
     P_SetAggressiveAI(1);player->cheats|=CF_GODMODE;R_MuzzleFlash=aggressive_flash;
     for(int mode=0;mode<3;++mode){
         mobj_t *actor=NULL;p_fluidfastpistol=mode==1;
@@ -133,12 +138,18 @@ static void test_aggressive_ai(void){
         }
         if(!actor)I_Error("No clear firing lane for aggressive AI test");
         laneX=actor->x;laneY=actor->y;
-        aggressiveTestActor=actor;aggressiveShotsCount=0;
+        aggressiveTestActor=actor;aggressiveShotsCount=0;memset(aggressiveShotHits,0,sizeof(aggressiveShotHits));
         P_SetMobjState(actor,actor->info->missilestate);
-        for(int tic=0;tic<180&&aggressiveShotsCount<4;++tic){++leveltime;P_MobjThinker(actor);}
+        for(int tic=0;tic<700&&aggressiveShotsCount<12;++tic){++leveltime;P_MobjThinker(actor);}
         int expected=mode==2?37:(mode==1&&P_FluidWeaponsEnabled()?10:14);
-        if(aggressiveShotsCount<4)I_Error("Aggressive shooter stopped firing mode %d",mode);
-        for(int n=1;n<4;++n)if(aggressiveShotTimes[n]-aggressiveShotTimes[n-1]!=expected)I_Error("Aggressive cadence mode %d: %d vs %d",mode,aggressiveShotTimes[n]-aggressiveShotTimes[n-1],expected);
+        if(aggressiveShotsCount<12)I_Error("Aggressive shooter stopped firing mode %d",mode);
+        int hitIntervals=0;
+        for(int n=1;n<aggressiveShotsCount;++n){
+            int interval=aggressiveShotTimes[n]-aggressiveShotTimes[n-1];
+            if(aggressiveShotHits[n-1]){++hitIntervals;if(interval!=expected)I_Error("Aggressive cadence after hit mode %d: %d vs %d",mode,interval,expected);}
+            else if(interval<expected)I_Error("Miss unexpectedly accelerated firing");
+        }
+        if(hitIntervals<5)I_Error("Not enough successful hits to test sustained firing");
         // Real projectile feedback: a miss requests a movement burst; a hit does not.
         P_AggressiveRemove(actor);mobj_t missile={0};P_AggressiveMissile(&missile,actor);P_AggressiveImpact(&missile);
         if(P_CheckMissileRange(actor))I_Error("Missed projectile did not request repositioning");
@@ -162,7 +173,7 @@ static void test_aggressive_ai(void){
     }
     demoplayback=true;if(P_AggressiveEnabled())I_Error("Aggressive AI changed demos");demoplayback=false;
     P_SetAggressiveAI(0);if(P_AggressiveStateTics(target,S_POSS_ATK1,10)!=10)I_Error("Disabled AI changed animation timings");
-    P_SetAggressiveAI(enabled);leveltime=oldtime;p_fluidfastpistol=fast;player->cheats=cheats;target->momx=mx;target->momy=my;R_MuzzleFlash=flash;aggressiveTestActor=NULL;
+    P_SetAggressiveAI(enabled);leveltime=oldtime;p_fluidfastpistol=fast;player->cheats=cheats;target->momx=mx;target->momy=my;R_MuzzleFlash=flash;R_DamageHit=damageHook;aggressiveTestActor=NULL;
     puts("Aggressive AI: live pistol/shotgun cadence, projectile hits/misses, heavy-hit stagger, fixed-position barrages and demo guards passed.");
 }
 static void test_advanced_tactics(void){
@@ -308,9 +319,10 @@ static void test_fluid_monsters(void){
         P_UnsetThingPosition(actor);actor->x+=48*FRACUNIT;actor->y+=48*FRACUNIT;P_SetThingPosition(actor);end=actor->x;P_FluidTick(actor);
         if(actor->x!=end)I_Error("Fluid diagonal teleport cancellation");
         actor->movedir=0;P_SetMobjState(actor,S_POSS_RUN1);end=actor->x;
-        mobj_t *blocker=P_SpawnMobj(actor->x,actor->y,actor->z,MT_POSSESSED);
+        // Use a solid decoration: overlapping living monsters intentionally separate.
+        mobj_t *blocker=P_SpawnMobj(actor->x,actor->y,actor->z,MT_BARREL);
         actor->flags&=~MF_NOCLIP;P_FluidTick(actor);
-        if(actor->x!=end)I_Error("Fluid collision bypass");
+        if(actor->x!=end)I_Error("Fluid collision bypass type %d duration %d delta %d z %d blockerz %d",types[i],duration,actor->x-end,actor->z/FRACUNIT,blocker->z/FRACUNIT);
         P_RemoveMobj(blocker);actor->flags|=MF_NOCLIP;P_FluidTick(actor);
         if(actor->x!=end)I_Error("Fluid blocked sequence was not cancelled");
         P_SetMobjState(actor,S_POSS_RUN1);end=actor->x;actor->health=0;P_FluidTick(actor);
@@ -367,6 +379,405 @@ static void test_map_sound_origins(void){
     puts("Map/door sound origins and player/projectile routing passed.");
 }
 #ifdef DOOM_RENDER3D
+static void key(evtype_t type, int value);
+
+static int global_line=-1,global_side;
+static double global_ax,global_ay,global_tx,global_ty,global_u,global_z;
+static float global_depth;
+static fixed_t global_startx,global_starty,global_startz;
+static void global_hit(int line,int side,double u,double z){
+    line_t *l=&lines[line];vertex_t *a=side?l->v2:l->v1,*b=side?l->v1:l->v2;
+    double tx=(double)(b->x-a->x)/FRACUNIT,ty=(double)(b->y-a->y)/FRACUNIT,len=hypot(tx,ty);tx/=len;ty/=len;
+    double stand=2-P_GlobalDigDepth(line,side,(float)u,(float)z);
+    mobj_t rocket={0};rocket.type=MT_ROCKET;rocket.radius=11*FRACUNIT;rocket.height=8*FRACUNIT;
+    rocket.x=(fixed_t)((a->x/(double)FRACUNIT+u*tx+ty*stand)*FRACUNIT);
+    rocket.y=(fixed_t)((a->y/(double)FRACUNIT+u*ty-tx*stand)*FRACUNIT);
+    rocket.z=(fixed_t)((z-4)*FRACUNIT);rocket.momx=(fixed_t)(-ty*20*FRACUNIT);rocket.momy=(fixed_t)(tx*20*FRACUNIT);
+    if(!P_GlobalDigImpact(&rocket))I_Error("Global digging missed wall %d side %d",line,side);
+}
+static void test_global_digging(void){
+    static int last=-1,start=-1,phase=0;
+    if(gamestate!=GS_LEVEL||gameaction!=ga_nothing||last==gametic)return;last=gametic;
+    if(start<0)start=gametic;int t=gametic-start;player_t *p=&players[0];
+    if(t==5){
+        int tested=0,orientations=0;sector_t *room=p->mo->subsector->sector;
+        for(int i=0;i<numlines;++i)for(int side=0;side<2;++side){
+            line_t *l=&lines[i];if(l->sidenum[side]<0)continue;
+            sector_t *f=side?l->backsector:l->frontsector,*b=side?l->frontsector:l->backsector;
+            double len=hypot(l->dx/(double)FRACUNIT,l->dy/(double)FRACUNIT),floor=f->floorheight/(double)FRACUNIT,ceil=f->ceilingheight/(double)FRACUNIT;
+            if(len<64||ceil-floor<32)continue;
+            double z=(floor+ceil)*.5;
+            if(b){double bf=b->floorheight/(double)FRACUNIT,bc=b->ceilingheight/(double)FRACUNIT;
+                if(bf-floor>=16)z=(floor+fmin(bf,ceil))*.5;else if(ceil-bc>=16)z=(ceil+fmax(bc,floor))*.5;else continue;}
+            P_GlobalDigReset();global_hit(i,side,len*.5,z);
+            if(P_GlobalDigDepth(i,side,(float)(len*.5),(float)z)<=0)I_Error("Global digging damaged wrong wall %d",i);
+            ++tested;orientations|=1<<((l->dx>0?1:0)+(l->dy>0?2:0));
+            if(global_line<0&&!b&&f==room&&len>=96&&ceil-floor>=72){global_line=i;global_side=side;global_u=len*.5;global_z=floor+32;}
+        }
+        int cornerTested=0;
+        for(int i=0;i<numlines&&!cornerTested;++i){line_t *a=&lines[i];if(a->backsector||!a->frontsector||hypot(a->dx/(double)FRACUNIT,a->dy/(double)FRACUNIT)<64)continue;
+            for(int j=0;j<a->frontsector->linecount&&!cornerTested;++j){line_t *b=a->frontsector->lines[j];if(b==a||b->backsector||b->frontsector!=a->frontsector)continue;
+                if(b->v2->x!=a->v1->x||b->v2->y!=a->v1->y)continue;
+                if(fabs((double)a->dx*b->dy-(double)a->dy*b->dx)<1)continue;
+                float z=(a->frontsector->floorheight/(float)FRACUNIT+a->frontsector->ceilingheight/(float)FRACUNIT)*.5f,bounds[4];
+                if(a->frontsector->ceilingheight-a->frontsector->floorheight<64*FRACUNIT)continue;
+                P_GlobalDigReset();global_hit(i,0,4,z);
+                if(!P_GlobalDigBounds(i,0,bounds)||!P_GlobalDigBounds((int)(b-lines),0,bounds))I_Error("Blast failed to wrap connected wall corner");
+                cornerTested=1;
+            }
+        }
+        if(!cornerTested)I_Error("No corner available for wrap test");
+        puts("Excavation: blast continued across a connected wall corner.");
+        printf("Global excavation: %d ordinary map wall faces checked, direction mask %x\n",tested,orientations);
+        if(tested<4)I_Error("Not enough ordinary walls tested");
+        if(global_line<0){for(int i=0;i<numlines;++i)if(!lines[i].backsector&&hypot(lines[i].dx/(double)FRACUNIT,lines[i].dy/(double)FRACUNIT)>=128&&lines[i].frontsector->ceilingheight-lines[i].frontsector->floorheight>=80*FRACUNIT){global_line=i;global_side=0;global_u=hypot(lines[i].dx/(double)FRACUNIT,lines[i].dy/(double)FRACUNIT)*.5;global_z=lines[i].frontsector->floorheight/(double)FRACUNIT+32;break;}}
+        if(global_line<0)I_Error("No test wall found");
+        {
+            int savedDamage=p_wall_damage;p_wall_damage=100;P_GlobalDigReset();
+            global_hit(global_line,global_side,global_u,global_z);
+            float normal=P_GlobalDigDepth(global_line,global_side,(float)global_u,(float)global_z);
+            p_wall_damage=500;
+            if(fabsf(P_GlobalDigDepth(global_line,global_side,(float)global_u,(float)global_z)-normal)>.001f)I_Error("Damage setting retroactively changed crater");
+            P_GlobalDigReset();global_hit(global_line,global_side,global_u,global_z);
+            float boosted=P_GlobalDigDepth(global_line,global_side,(float)global_u,(float)global_z);
+            if(fabsf(boosted-normal*5)>.01f)I_Error("500 percent wall damage is not five times base: %f vs %f",boosted,normal);
+            p_wall_damage=100;P_GlobalDigReset();
+            for(int n=0;n<5;++n)global_hit(global_line,global_side,global_u,global_z);
+            if(fabsf(P_GlobalDigDepth(global_line,global_side,(float)global_u,(float)global_z)-boosted)>.01f)I_Error("One boosted hit differs from five normal hits");
+            p_wall_damage=savedDamage;P_GlobalDigReset();
+            puts("Wall damage: one 500% hit equals five 100% hits; existing craters unchanged by setting.");
+        }
+
+        line_t *l=&lines[global_line];vertex_t *a=global_side?l->v2:l->v1,*b=global_side?l->v1:l->v2;
+        global_ax=a->x/(double)FRACUNIT;global_ay=a->y/(double)FRACUNIT;
+        double len=hypot((b->x-a->x)/(double)FRACUNIT,(b->y-a->y)/(double)FRACUNIT);
+        global_tx=(b->x-a->x)/(double)FRACUNIT/len;global_ty=(b->y-a->y)/(double)FRACUNIT/len;
+        P_GlobalDigReset();
+        P_UnsetThingPosition(p->mo);p->mo->x=(fixed_t)((global_ax+global_u*global_tx+global_ty*72)*FRACUNIT);p->mo->y=(fixed_t)((global_ay+global_u*global_ty-global_tx*72)*FRACUNIT);
+        p->mo->z=(fixed_t)((global_z-32)*FRACUNIT);P_SetThingPosition(p->mo);
+        p->mo->angle=(angle_t)(atan2(global_tx,-global_ty)*(4294967296.0/(2*3.141592653589793)));
+        p->mo->floorz=p->mo->subsector->sector->floorheight;p->mo->ceilingz=p->mo->subsector->sector->ceilingheight;
+        global_startx=p->mo->x;global_starty=p->mo->y;global_startz=p->mo->z;
+        p->cheats|=CF_GODMODE;
+        I_Render3DScreenshotTo("global-before.png");
+    }
+    if(t==12)P_SpawnPlayerMissile(p->mo,MT_ROCKET);
+    if(t==40)I_Render3DScreenshotTo("global-one-rocket.png");
+    if(t==45){
+        float b[4];if(!P_GlobalDigBounds(global_line,global_side,b))I_Error("Real rocket did not deform wall");
+
+        for(int shot=0;shot<6;++shot){
+            unsigned before=P_GlobalDigRevision();
+            mobj_t *missile=P_SpawnMobj(p->mo->x,p->mo->y,(fixed_t)((global_z-4)*FRACUNIT),MT_ROCKET);
+            missile->target=p->mo;missile->momx=(fixed_t)(-global_ty*20*FRACUNIT);missile->momy=(fixed_t)(global_tx*20*FRACUNIT);
+            for(int step=0;step<20&&(missile->flags&MF_MISSILE);++step)P_XYMovement(missile);
+            P_RemoveMobj(missile);
+            if(P_GlobalDigRevision()==before)I_Error("Repeated actual rocket failed to deepen cavity: %d",shot);
+        }
+        // Rocket knockback is unrelated to the geometry clearance check.
+        P_UnsetThingPosition(p->mo);p->mo->x=global_startx;p->mo->y=global_starty;p->mo->z=global_startz;
+        p->mo->momx=p->mo->momy=p->mo->momz=0;P_SetThingPosition(p->mo);
+        p->mo->floorz=p->mo->subsector->sector->floorheight;p->mo->ceilingz=p->mo->subsector->sector->ceilingheight;
+        // Excavate a body-sized recess with many individually small hits.
+        for(int n=0;n<18;++n)for(int u=-24;u<=24;u+=16)for(int z=-24;z<=24;z+=16)global_hit(global_line,global_side,global_u+u,global_z+z);
+        mobj_t probe=*p->mo;probe.radius=16*FRACUNIT;probe.height=56*FRACUNIT;probe.z=(fixed_t)((global_z-32)*FRACUNIT);
+        fixed_t x=(fixed_t)((global_ax+global_u*global_tx-global_ty*8)*FRACUNIT),y=(fixed_t)((global_ay+global_u*global_ty+global_tx*8)*FRACUNIT);
+        if(!P_GlobalDigFit(global_line,global_side,&probe,x,y))I_Error("Excavated recess does not fit player");
+        fixed_t deepx=(fixed_t)((global_ax+global_u*global_tx-global_ty*72)*FRACUNIT),deepy=(fixed_t)((global_ay+global_u*global_ty+global_tx*72)*FRACUNIT);int owner;
+        if(P_GlobalDigPosition(&probe,deepx,deepy,&owner))I_Error("Excavated back wall does not block");
+        global_depth=P_GlobalDigDepth(global_line,global_side,(float)global_u,(float)global_z);
+        {extern int p_breakablewalls;float bounds[4];
+         p_breakablewalls=0;
+         if(P_GlobalDigEnabled()||P_GlobalDigBounds(global_line,global_side,bounds))I_Error("Disabled excavation still visible");
+         p_breakablewalls=1;
+         if(!P_GlobalDigBounds(global_line,global_side,bounds)||fabsf(global_depth-P_GlobalDigDepth(global_line,global_side,(float)global_u,(float)global_z))>.001f)I_Error("Toggle lost damage");}
+        G_SaveGame(5,"Global excavation test");phase=1;
+    }
+    if(t==60&&phase==1){I_Render3DScreenshotTo("global-damaged.png");P_GlobalDigReset();G_LoadGame("doomsav5.dsg");phase=2;}
+    if(t==80&&phase==2){if(fabsf(global_depth-P_GlobalDigDepth(global_line,global_side,(float)global_u,(float)global_z))>.001f)I_Error("Global excavation save/load mismatch");I_Render3DScreenshotTo("global-restored.png");puts("Global excavation: wall directions, actual rocket, body clearance, solid back wall and save/load passed.");phase=3;}
+    if(t>85&&phase==3){
+        for(int d=-64;d<=8;d+=4){fixed_t x=(fixed_t)((global_ax+global_u*global_tx-global_ty*d)*FRACUNIT),y=(fixed_t)((global_ay+global_u*global_ty+global_tx*d)*FRACUNIT);
+            if(!P_TryMove(p->mo,x,y))I_Error("Actual movement into recess blocked at depth %d",d);
+        }
+        puts("Global excavation: player walked across original wall plane into saved cavity.");I_Quit();
+    }
+    if(t>200)I_Error("Global excavation test timeout");
+}
+static void test_breaches(void){
+    static int phase=0,line=-1,exitRoom=-1,captureTic=0,doorSector=-1;static float u,z,depth;static double ax,ay,tx,ty;
+    if(gamestate!=GS_LEVEL||gameaction!=ga_nothing||gametic<12)return;
+    mobj_t *player=players[0].mo;
+    if(!phase){
+        p_throughwalls=1;
+        int doorTest=getenv("DOOM_TEST_DOOR_BREACHES")!=NULL,thickTest=getenv("DOOM_TEST_THICK_BREACHES")!=NULL;
+        p_breachdoors=doorTest;p_deeperdig=getenv("DOOM_TEST_DEEPER_DIG")!=NULL;
+        for(int i=0;i<numlines&&line<0;++i){line_t *l=&lines[i];if(!l->frontsector)continue;
+            if(doorTest){if(!l->backsector||l->backsector->ceilingheight!=l->backsector->floorheight)continue;}
+            else if(l->backsector)continue;
+            double len=hypot(l->dx/(double)FRACUNIT,l->dy/(double)FRACUNIT);
+            if(len<96||l->frontsector->ceilingheight-l->frontsector->floorheight<(doorTest?64:80)*FRACUNIT)continue;
+            P_GlobalDigReset();float center=l->frontsector->floorheight/(float)FRACUNIT+36;
+            global_hit(i,0,len*.5,center);
+            float d=P_GlobalDigBreachLimit(i,0,(float)(len*.5),center);
+            if(d<4||d>P_GlobalDigMaxDepth()||(thickTest&&d<(atoi(getenv("DOOM_TEST_THICK_BREACHES"))>1?atoi(getenv("DOOM_TEST_THICK_BREACHES")):128)))continue;
+            int room=P_GlobalDigBreachSector(i,0,0,-l->dy/(float)FRACUNIT,l->dx/(float)FRACUNIT);
+            if(room<0||abs(sectors[room].floorheight-l->frontsector->floorheight)>24*FRACUNIT||sectors[room].ceilingheight<l->frontsector->floorheight+(doorTest?64:80)*FRACUNIT)continue;
+            line=i;u=(float)(len*.5);z=center;depth=d;exitRoom=room;doorSector=doorTest?(int)(l->backsector-sectors):-1;
+            ax=l->v1->x/(double)FRACUNIT;ay=l->v1->y/(double)FRACUNIT;tx=l->dx/(double)FRACUNIT/len;ty=l->dy/(double)FRACUNIT/len;
+        }
+        if(line<0)I_Error("No finite wall slab available for breach test");
+        printf("Breach fixture: line %d, thickness %.2f, exit sector %d\n",line,depth,exitRoom);
+        if(doorSector>=0){
+            lines[line].special=26; // Blue-key manual door: the breach must bypass the lock only when enabled.
+            for(int k=0;k<NUMCARDS;++k)players[0].cards[k]=false;
+            P_UseSpecialLine(player,&lines[line],0);
+            if(sectors[doorSector].specialdata)I_Error("Locked door unexpectedly opened without key");
+            puts("Locked-door fixture: normal use rejected without key.");
+        }
+        if(P_GlobalDigBreachMargin(line,0,u,z)>0)I_Error("One small hit breached wall prematurely");
+        for(int n=0;n<(p_deeperdig?160:thickTest?64:24);++n){
+            for(int v=-32;v<=32;v+=16)for(int h=-32;h<=32;h+=16)global_hit(line,0,u+v,z+h);
+            if(thickTest&&depth>=256&&n==12){
+                float current=P_GlobalDigDepth(line,0,u,z);
+                if(current<=80||current>=depth)I_Error("Deep partial-crater fixture out of range: %f",current);
+                mobj_t *shot=P_SpawnMobj((fixed_t)((ax+u*tx-ty*40)*FRACUNIT),(fixed_t)((ay+u*ty+tx*40)*FRACUNIT),(fixed_t)((z-4)*FRACUNIT),MT_ROCKET);
+                shot->target=player;shot->momx=(fixed_t)(-ty*20*FRACUNIT);shot->momy=(fixed_t)(tx*20*FRACUNIT);
+                unsigned before=P_GlobalDigRevision();
+                for(int step=0;step<20&&(shot->flags&MF_MISSILE);++step)P_XYMovement(shot);
+                if((shot->flags&MF_MISSILE)||P_GlobalDigRevision()==before)I_Error("Deep partial wall failed to stop and receive rocket impact");
+                P_RemoveMobj(shot);printf("Deep partial wall at %.1f units stopped and received real rocket impact.\n",current);
+            }
+        }
+        float x=(float)(ax+u*tx),y=(float)(ay+u*ty);
+        if(!P_GlobalDigBreachRay(line,x,y,z,(float)-ty,(float)tx,0))I_Error("Fully excavated wall does not pass shot");
+        if(P_GlobalDigBreachRay(line,x+tx*70,y+ty*70,z,(float)-ty,(float)tx,0))I_Error("Shot escaped outside aperture");
+        if(p_deeperdig&&depth>256){
+            p_deeperdig=0;
+            if(P_GlobalDigBreachRay(line,x,y,z,(float)-ty,(float)tx,0))I_Error("Deeper toggle off still opens thick wall");
+            p_deeperdig=1;
+            if(!P_GlobalDigBreachRay(line,x,y,z,(float)-ty,(float)tx,0))I_Error("Deeper toggle lost stored damage");
+            puts("Deeper digging toggle restores standard limits and preserves stored damage.");
+        }
+        p_throughwalls=0;p_breachdoors=0;
+        if(P_GlobalDigBreachRay(line,x,y,z,(float)-ty,(float)tx,0))I_Error("Breach toggle off still passes shot");
+        p_throughwalls=doorTest?0:1;p_breachdoors=doorTest;
+        P_UnsetThingPosition(player);player->x=(fixed_t)((x+ty*40)*FRACUNIT);player->y=(fixed_t)((y-tx*40)*FRACUNIT);player->z=(fixed_t)((z-36)*FRACUNIT);P_SetThingPosition(player);
+        player->floorz=player->subsector->sector->floorheight;player->ceilingz=player->subsector->sector->ceilingheight;
+        player->angle=(angle_t)(atan2(tx,-ty)*(4294967296.0/(2*3.141592653589793)));players[0].cheats|=CF_GODMODE;
+        mobj_t *target=P_SpawnMobj((fixed_t)((x-ty*(depth+36))*FRACUNIT),(fixed_t)((y+tx*(depth+36))*FRACUNIT),player->z,MT_TROOP);
+        target->health=1000;target->flags&=~MF_COUNTKILL;
+        if(!P_CheckSight(player,target))I_Error("Sight failed through breach");
+        P_LineAttack(player,player->angle,2048*FRACUNIT,0,10);
+        if(target->health>=1000)I_Error("Hitscan failed through breach");
+        P_RemoveMobj(target);
+        mobj_t *rocket=P_SpawnMobj(player->x,player->y,player->z+32*FRACUNIT,MT_ROCKET);rocket->target=player;rocket->momx=(fixed_t)(-ty*10*FRACUNIT);rocket->momy=(fixed_t)(tx*10*FRACUNIT);
+        for(int n=0;n<(int)((depth+65)/10);++n)P_XYMovement(rocket);
+        if(!(rocket->flags&MF_MISSILE))I_Error("Rocket blocked crossing breach");
+        P_RemoveMobj(rocket);
+        if(doorSector>=0){
+            fixed_t old=sectors[doorSector].ceilingheight;
+            float margin=P_GlobalDigDepth(line,0,u+35,z);
+            sectors[doorSector].ceilingheight+=16*FRACUNIT;
+            if(fabsf(P_GlobalDigDepth(line,0,u+35,z+16)-margin)>.01f)I_Error("Breach does not follow moving door");
+            if(!P_GlobalDigBreachRay(line,x,y,z+16,(float)-ty,(float)tx,0))I_Error("Raised door hole blocks shot");
+            sectors[doorSector].ceilingheight=old;
+            puts("Door breach follows ceiling movement and returns when closed.");
+        }
+        I_Render3DScreenshotTo("breach-front.png");G_SaveGame(5,"Breach passage test");phase=1;return;
+    }
+    if(phase==1){P_GlobalDigReset();G_LoadGame("doomsav5.dsg");phase=2;return;}
+    if(phase==2){
+        if(!P_GlobalDigBreachRay(line,(float)(ax+u*tx),(float)(ay+u*ty),z,(float)-ty,(float)tx,0))I_Error("Breach save/load failed");
+        for(int d=-36;d<depth+24;d+=2){fixed_t x=(fixed_t)((ax+u*tx-ty*d)*FRACUNIT),y=(fixed_t)((ay+u*ty+tx*d)*FRACUNIT);if(!P_TryMove(player,x,y))I_Error("Player blocked in breach at %d",d);}
+        if(doorSector>=0){
+            fixed_t old=sectors[doorSector].ceilingheight;
+            if(!P_TryMove(player,(fixed_t)((ax+u*tx-ty*depth*.5)*FRACUNIT),(fixed_t)((ay+u*ty+tx*depth*.5)*FRACUNIT)))I_Error("Cannot stand inside breached door");
+            sectors[doorSector].ceilingheight+=8*FRACUNIT;P_ChangeSector(&sectors[doorSector],false);
+            if(player->ceilingz-player->floorz<player->height)I_Error("Moving breached door crushed clear passage");
+            sectors[doorSector].ceilingheight=old;P_ChangeSector(&sectors[doorSector],false);
+            if(player->ceilingz-player->floorz<player->height)I_Error("Closed breached door loses clearance");
+            if(!P_TryMove(player,(fixed_t)((ax+u*tx-ty*(depth+20))*FRACUNIT),(fixed_t)((ay+u*ty+tx*(depth+20))*FRACUNIT)))I_Error("Cannot leave breached door");
+        }
+        player->angle+=ANG180;captureTic=gametic+4;phase=3;return;
+    }
+    if(phase==3){player->angle=R_PointToAngle2(player->x,player->y,(fixed_t)((ax+u*tx)*FRACUNIT),(fixed_t)((ay+u*ty)*FRACUNIT));if(gametic<captureTic)return;I_Render3DScreenshotTo("breach-back.png");captureTic=gametic+4;phase=4;return;}
+    if(phase==4){
+        if(gametic<captureTic)return;
+        for(int d=(int)depth+20;d>=-36;d-=2){fixed_t x=(fixed_t)((ax+u*tx-ty*d)*FRACUNIT),y=(fixed_t)((ay+u*ty+tx*d)*FRACUNIT);if(!P_TryMove(player,x,y))I_Error("Reverse passage blocked at %d",d);}
+        puts("Breach: partial hits, aperture, toggle, sight, hitscan, rocket, save/load and two-way player passage passed.");I_Quit();
+    }
+}
+static void test_digging(void){
+    static int last=-1,phase=0,begun=-1,finish=0;
+    static long savedShape;
+    if(gamestate!=GS_LEVEL||gameaction!=ga_nothing)return;
+    if(last==gametic)return;last=gametic;
+    if(begun<0)begun=gametic;
+    int t=gametic-begun;player_t *p=&players[0];
+    if(t==10){
+        if(P_TryMove(p->mo,336*FRACUNIT,320*FRACUNIT))I_Error("Digging: intact wall was traversable");
+        I_Render3DScreenshotTo("dig-before.png");
+    }
+    // Small excavation requires aiming around the rim, rather than
+    // assuming a centerline shot always makes a player-sized opening.
+    if(t>=30&&phase==0&&t%12==6){
+        extern float tourpitch;extern boolean freeaim;
+        float oldPitch=tourpitch;boolean oldFree=freeaim;angle_t oldAngle=p->mo->angle;
+        int n=(t-30)/12;int yaw[5]={0,-1,1,0,0};float pitch[5]={0,0,0,.24f,-.24f};
+        p->mo->angle=(angle_t)(yaw[n%5]*(ANG45/4));tourpitch=pitch[n%5];freeaim=true;
+        P_SpawnPlayerMissile(p->mo,MT_ROCKET);--p->ammo[am_misl];
+        p->mo->angle=oldAngle;tourpitch=oldPitch;freeaim=oldFree;
+    }
+    if(t==50)I_Render3DScreenshotTo("dig-first-impact.png");
+    if(t>30&&phase==0){
+        P_TryMove(p->mo,p->mo->x+4*FRACUNIT,320*FRACUNIT);
+        if(p->mo->x>=816*FRACUNIT){
+            key(ev_keyup,KEY_RCTRL);p->cmd.buttons=0;p->ammo[am_misl]=0;
+            for(thinker_t *th=thinkercap.next,*next;th!=&thinkercap;th=next){
+                next=th->next;
+                if(th->function.acp1==(actionf_p1)P_MobjThinker){mobj_t *m=(mobj_t*)th;if(m->type==MT_ROCKET&&(m->flags&MF_MISSILE))P_RemoveMobj(m);}
+            }
+            finish=t;phase=1;
+            I_Render3DScreenshotTo("dig-through.png");
+            savedShape=0;
+            for(int i=0;i<numsectors;++i)if(sectors[i].tag==19001)savedShape+=(sectors[i].ceilingheight-sectors[i].floorheight)/FRACUNIT;
+            if(savedShape<2000)I_Error("Digging: no meaningful excavation");
+            printf("Digging: walked through 384 units of concrete, excavated height sum %ld\n",savedShape);
+            G_SaveGame(5,"Digging prototype test");
+        }
+    }
+    if(phase==1&&t>finish+15){
+        for(int i=0;i<numsectors;++i)if(sectors[i].tag==19001)sectors[i].floorheight=sectors[i].ceilingheight=64*FRACUNIT;
+        G_LoadGame("doomsav5.dsg");phase=2;
+    }else if(phase==2&&t>finish+30){
+        long shape=0;
+        for(int i=0;i<numsectors;++i)if(sectors[i].tag==19001)shape+=(sectors[i].ceilingheight-sectors[i].floorheight)/FRACUNIT;
+        if(shape!=savedShape||p->mo->x<816*FRACUNIT)I_Error("Digging: geometry/save position not restored: %ld vs %ld, x=%d",shape,savedShape,p->mo->x/FRACUNIT);
+        // Walk back through the saved tunnel; solid material must stay solid.
+        for(int x=816;x>=160;x-=4)if(!P_TryMove(p->mo,x*FRACUNIT,320*FRACUNIT))I_Error("Digging: saved tunnel blocked at %d",x);
+        if(P_TryMove(p->mo,512*FRACUNIT,128*FRACUNIT))I_Error("Digging: untouched concrete became traversable");
+        I_Render3DScreenshotTo("dig-restored.png");phase=3;finish=t;
+        puts("Digging: real rocket impacts, tunnel traversal, intact-material collision and save/load passed.");
+    }else if(phase==3&&t>finish+5)I_Quit();
+    if(t>1800)I_Error("Digging: could not reach destination, x=%d",p->mo->x/FRACUNIT);
+}
+static void test_surfaces(void){
+    static int phase;static mobj_t *player;static float x,y;static int sector;static float savedFloor,savedCeil;
+    if(gamestate!=GS_LEVEL||gametic<5)return;
+    if(!phase){
+        player=players[0].mo;players[0].cheats|=CF_GODMODE;x=player->x/(float)FRACUNIT;y=player->y/(float)FRACUNIT;sector=(int)(player->subsector->sector-sectors);
+        // Actor-contact explosions must damage nearby floors, not remote ones.
+        mobj_t splash=*player;splash.type=MT_ROCKET;splash.height=8*FRACUNIT;splash.z=player->floorz+20*FRACUNIT;
+        P_GlobalDigMonsterContact(&splash,player->x,player->y);P_GlobalDigImpact(&splash);
+        float nearDepth=P_GlobalDigFlatDepth(sector,0,x,y);
+        unsigned floorVersion=P_GlobalDigFlatRevision(sector,0);
+        mobj_t ceilingShot=splash;P_GlobalDigFlatImpact(&ceilingShot,1);P_GlobalDigImpact(&ceilingShot);
+        if(P_GlobalDigFlatRevision(sector,0)!=floorVersion)I_Error("Ceiling impact invalidated floor cache");
+        float farArea[4]={x+1024,x+1056,y+1024,y+1056},patch[4];
+        if(P_GlobalDigFlatPatch(sector,0,farArea,patch))I_Error("Crater invalidated distant BSP leaf");
+        if(nearDepth<=0||nearDepth>4.61f)I_Error("Monster splash missed nearby floor");
+        P_GlobalDigReset();splash.z=player->floorz+80*FRACUNIT;
+        P_GlobalDigMonsterContact(&splash,player->x,player->y);P_GlobalDigImpact(&splash);
+        if(P_GlobalDigFlatDepth(sector,0,x,y)>0)I_Error("Monster splash reached remote floor");
+        P_GlobalDigReset();
+        int splashWall=0;
+        for(int i=0;i<numlines&&!splashWall;++i){line_t *l=&lines[i];if(l->backsector||!l->frontsector)continue;
+            float len=hypotf(l->dx/(float)FRACUNIT,l->dy/(float)FRACUNIT);if(len<80)continue;
+            float tx=l->dx/(float)FRACUNIT/len,ty=l->dy/(float)FRACUNIT/len;
+            splash.x=(l->v1->x+l->v2->x)/2+(fixed_t)(ty*16*FRACUNIT);splash.y=(l->v1->y+l->v2->y)/2-(fixed_t)(tx*16*FRACUNIT);
+            if(R_PointInSubsector(splash.x,splash.y)->sector!=l->frontsector)continue;
+            splash.z=l->frontsector->floorheight+28*FRACUNIT;
+            P_GlobalDigMonsterContact(&splash,splash.x,splash.y);P_GlobalDigImpact(&splash);
+            if(P_GlobalDigDepth(i,0,len*.5f,splash.z/(float)FRACUNIT+4)<=0)I_Error("Monster splash missed nearby wall");
+            ++splashWall;
+        }
+        if(!splashWall)I_Error("No monster wall splash tested");P_GlobalDigReset();
+        int doors=0;
+        for(int i=0;i<numlines&&!doors;++i){line_t *l=&lines[i];if(!l->frontsector||!l->backsector||l->frontsector->ceilingheight-l->backsector->ceilingheight<40*FRACUNIT)continue;
+            float len=hypotf(l->dx/(float)FRACUNIT,l->dy/(float)FRACUNIT);if(len<48)continue;
+            float h=l->backsector->ceilingheight/(float)FRACUNIT+16;
+            global_hit(i,0,len*.5f,h);float depth=P_GlobalDigDepth(i,0,len*.5f,h);if(depth<=0)continue;
+            l->backsector->ceilingheight+=7*FRACUNIT;
+            if(fabsf(depth-P_GlobalDigDepth(i,0,len*.5f,h+7))>.001f)I_Error("Door crater failed to follow ceiling");
+            int size=P_GlobalDigSaveSize();unsigned char *buf=malloc(size);P_GlobalDigSave(buf);P_GlobalDigReset();P_GlobalDigLoad(buf,size);free(buf);
+            l->backsector->ceilingheight-=7*FRACUNIT;
+            if(fabsf(depth-P_GlobalDigDepth(i,0,len*.5f,h))>.001f)I_Error("Door anchor save/load mismatch");++doors;
+        }
+        if(!doors)I_Error("No door attachment tested");
+        P_GlobalDigReset();puts("Monster splash near/far floor and moving door save/load passed.");
+        extern void P_ZMovement(mobj_t*);
+        for(int ceiling=0;ceiling<2;++ceiling){
+            mobj_t *rocket=P_SpawnMobj(player->x,player->y,ceiling?player->ceilingz-16*FRACUNIT:player->floorz+8*FRACUNIT,MT_ROCKET);
+            rocket->target=player;rocket->momz=(ceiling?20:-20)*FRACUNIT;P_ZMovement(rocket);
+            float depth=P_GlobalDigFlatDepth(sector,ceiling,x,y);
+            if(depth<=0||depth>4.61f)I_Error("First flat impact depth invalid %f",depth);
+            P_RemoveMobj(rocket);
+        }
+        // Widen the crater enough for the player's complete footprint.
+        for(int c=0;c<2;++c)for(int n=0;n<8;++n)for(int u=-16;u<=16;u+=16)for(int v=-16;v<=16;v+=16){
+            mobj_t rocket=*player;rocket.type=MT_ROCKET;rocket.x+=(u*FRACUNIT);rocket.y+=(v*FRACUNIT);
+            P_GlobalDigFlatImpact(&rocket,c);P_GlobalDigImpact(&rocket);
+        }
+        int originalFlat=sectors[sector].floorpic;sectors[sector].floorpic=R_FlatNumForName("NUKAGE1");
+        unsigned beforeLiquid=P_GlobalDigRevision();mobj_t liquidShot=*player;liquidShot.type=MT_ROCKET;
+        P_GlobalDigFlatImpact(&liquidShot,0);P_GlobalDigImpact(&liquidShot);
+        float liquidArea[4]={x-32,x+32,y-32,y+32},liquidBounds[4];
+        if(P_GlobalDigRevision()!=beforeLiquid||P_GlobalDigFlatDepth(sector,0,x,y)!=0||P_GlobalDigFlatPatch(sector,0,liquidArea,liquidBounds))I_Error("Liquid retained concrete excavation");
+        sectors[sector].floorpic=originalFlat;
+        puts("Liquid surface exclusion and old-crater suppression passed.");
+        savedFloor=P_GlobalDigFlatDepth(sector,0,x,y);savedCeil=P_GlobalDigFlatDepth(sector,1,x,y);
+        if(savedFloor>16.01f||savedCeil>32.01f)I_Error("Surface depth limit exceeded");
+        P_GlobalDigRefreshHeights(player);
+        if(player->floorz>=sectors[sector].floorheight||player->ceilingz<=sectors[sector].ceilingheight)I_Error("Flat excavation collision did not change");
+        extern int p_breakablewalls;p_breakablewalls=0;P_GlobalDigRefreshHeights(player);
+        if(player->floorz!=sectors[sector].floorheight||player->ceilingz!=sectors[sector].ceilingheight)I_Error("Disabled flat collision not restored");
+        p_breakablewalls=1;
+        int bytes=P_GlobalDigSaveSize();unsigned char *data=malloc(bytes);P_GlobalDigSave(data);P_GlobalDigReset();P_GlobalDigLoad(data,bytes);free(data);
+        if(fabsf(savedFloor-P_GlobalDigFlatDepth(sector,0,x,y))>.001f||fabsf(savedCeil-P_GlobalDigFlatDepth(sector,1,x,y))>.001f)I_Error("Flat save/load mismatch");
+        int limits=0;for(int i=0;i<numlines;++i)for(int side=0;side<2;++side){if(lines[i].sidenum[side]<0)continue;
+            float len=hypotf((lines[i].v2->x-lines[i].v1->x)/(float)FRACUNIT,(lines[i].v2->y-lines[i].v1->y)/(float)FRACUNIT);
+            float limit=P_GlobalDigWallLimit(i,side,len*.5f);if(limit<0||limit>64)I_Error("Invalid wall thickness");if(limit<63.9f)++limits;
+        }
+        if(!limits)I_Error("No thin wall detected on test map");
+        printf("Surfaces: real floor/ceiling rockets, collision, toggle, save/load, depth limits; %d thin wall sides detected.\n",limits);
+        I_Render3DLook(10000);phase=1;return;
+    }
+    if(phase==1){I_Render3DScreenshotTo("floor-crater.png");phase=2;return;}
+    if(phase==2){I_Render3DLook(-20000);phase=3;return;}
+    if(phase==3){I_Render3DScreenshotTo("ceiling-crater.png");phase=4;return;}
+    if(phase==4){
+        int found=0;
+        for(int i=0;i<numlines&&!found;++i){line_t *l=&lines[i];if(l->backsector||!l->frontsector)continue;
+            double tx=l->dx/(double)FRACUNIT,ty=l->dy/(double)FRACUNIT,len=hypot(tx,ty);if(len<96)continue;tx/=len;ty/=len;
+            sector_t *room=l->frontsector;if(room->ceilingheight-room->floorheight<80*FRACUNIT)continue;
+            int neighbor=0;for(int j=0;j<room->linecount;++j){line_t *b=room->lines[j];if(b!=l&&!b->backsector&&b->v2==l->v1&&fabs((double)b->dx*l->dy-(double)b->dy*l->dx)>1)neighbor=1;}if(!neighbor)continue;
+            fixed_t px=l->v1->x+(fixed_t)((tx*48+ty*72)*FRACUNIT),py=l->v1->y+(fixed_t)((ty*48-tx*72)*FRACUNIT);
+            if(R_PointInSubsector(px,py)->sector!=room||!P_CheckPosition(player,px,py))continue;
+            P_GlobalDigReset();P_UnsetThingPosition(player);player->x=px;player->y=py;player->z=room->floorheight;player->momx=player->momy=player->momz=0;P_SetThingPosition(player);player->floorz=room->floorheight;player->ceilingz=room->ceilingheight;
+            player->angle=R_PointToAngle2(px,py,l->v1->x+(fixed_t)(tx*4*FRACUNIT),l->v1->y+(fixed_t)(ty*4*FRACUNIT));
+            for(int n=0;n<8;++n)global_hit(i,0,4,room->floorheight/(double)FRACUNIT+40);
+            players[0].viewheight=41*FRACUNIT;players[0].viewz=player->z+players[0].viewheight;players[0].deltaviewheight=0;
+            I_Render3DLook(700);found=1;
+        }
+        if(!found)I_Error("No visible corner capture location");phase=5;return;
+    }
+    if(phase==5){I_Render3DScreenshotTo("corner-crater.png");phase=6;return;}
+    if(phase==6&&getenv("DOOM_TEST_FLAT_STRESS")){
+        int shots=0;uint64_t began=SDL_GetTicksNS();
+        // Spread impacts over the map, then measure steady frames separately.
+        for(int i=0;i<numlines&&shots<120;++i){line_t *l=&lines[i];if(!l->frontsector)continue;
+            float len=hypotf(l->dx/(float)FRACUNIT,l->dy/(float)FRACUNIT);if(len<96)continue;
+            fixed_t px=(l->v1->x+l->v2->x)/2+(fixed_t)(l->dy/(float)FRACUNIT/len*40*FRACUNIT);
+            fixed_t py=(l->v1->y+l->v2->y)/2-(fixed_t)(l->dx/(float)FRACUNIT/len*40*FRACUNIT);
+            subsector_t *sub=R_PointInSubsector(px,py);if(sub->sector!=l->frontsector)continue;
+            mobj_t rocket=*player;rocket.type=MT_ROCKET;rocket.x=px;rocket.y=py;rocket.subsector=sub;
+            for(int c=0;c<2;++c){P_GlobalDigFlatImpact(&rocket,c);P_GlobalDigImpact(&rocket);}++shots;
+        }
+        printf("Flat stress: %d floor/ceiling pairs, impact CPU %.3f ms\n",shots,(SDL_GetTicksNS()-began)/1e6);phase=7;return;
+    }
+    if(phase>=7){if(++phase<265)return;I_Quit();}
+    if(phase==6)I_Quit();
+}
 static void test_settings(void){
     static int phase,frames,was_fullscreen;static SDL_Window *test_window;
     if(gamestate!=GS_LEVEL||gameaction!=ga_nothing)return;
@@ -454,6 +865,36 @@ static void key(evtype_t type, int value)
 void I_TestFrame(void)
 {
     int test_tic=gametic-test_start;
+    if(getenv("DOOM_TEST_BUNDLED_ONLY")){
+        if(gamestate==GS_LEVEL&&gametic>10){
+            test_fluid_monsters();
+            extern void I_TestBundledModSettings(void);I_TestBundledModSettings();
+            I_Quit();
+        }return;
+    }
+
+    if(getenv("DOOM_TEST_SEAMS_SAVE")){
+        static int phase;
+        if(gamestate!=GS_LEVEL||!players[0].mo||gametic<12)return;
+        if(!phase){I_Render3DLook(400);phase=1;return;}
+        if(phase==1){I_Render3DScreenshotTo("seams.png");phase=2;return;}I_Quit();return;
+    }
+    if(getenv("DOOM_TEST_STUCK_SAVE")){
+        static int last=-1;
+        if(gamestate!=GS_LEVEL||!players[0].mo)return;
+        players[0].cheats|=CF_GODMODE;
+        if(gametic!=last&&(gametic<5||gametic%70==0)){
+            last=gametic;int n=0;
+            for(thinker_t *th=thinkercap.next;th!=&thinkercap;th=th->next){
+                if(th->function.acp1!=(actionf_p1)P_MobjThinker)continue;
+                mobj_t *m=(mobj_t*)th;
+                if(m->type!=MT_SHOTGUY||m->health<=0)continue;
+                fprintf(stderr,"SERGEANT tic=%d id=%d x=%.3f y=%.3f z=%.3f floor=%.3f dir=%d state=%d target=%d\n",gametic,n++,m->x/(double)FRACUNIT,m->y/(double)FRACUNIT,m->z/(double)FRACUNIT,m->floorz/(double)FRACUNIT,m->movedir,(int)(m->state-states),m->target!=NULL);
+            }
+        }
+        if(gametic>350)I_Quit();return;
+    }
+
 #ifdef DOOM_RENDER3D
     if(getenv("DOOM_CAPTURE_IMPACTS")&&gamestate==GS_LEVEL){
         static int start=-1,shot=0,capture=0,menu=0;player_t *p=&players[0];
@@ -608,6 +1049,11 @@ void I_TestFrame(void)
         if(t>=190){if(automapactive)I_Error("Automap did not close");puts("Keycard lighting, pickup event, duplicate suppression, light removal and automap discovery passed.");I_Quit();}
         return;
     }
+    if(getenv("DOOM_EFFECTS_OUT")&&gamestate==GS_LEVEL){extern void I_TestEffectsPreview(int);I_TestEffectsPreview(test_tic);return;}
+    if(getenv("DOOM_TEST_BREACHES")){test_breaches();return;}
+    if(getenv("DOOM_TEST_SURFACES")){test_surfaces();return;}
+    if(getenv("DOOM_TEST_GLOBAL_DIGGING")){test_global_digging();return;}
+    if(getenv("DOOM_TEST_DIGGING")){test_digging();return;}
     if(getenv("DOOM_TEST_SETTINGS")){test_settings();return;}
     if(getenv("DOOM_TEST_WHEEL")){test_wheel();return;}
 #endif
@@ -666,6 +1112,7 @@ void I_TestFrame(void)
 #ifdef DOOM_RENDER3D
             extern void I_TestBundledModSettings(void);I_TestBundledModSettings();
             {extern void I_TestImpactOptions(void);I_TestImpactOptions();}
+
 #endif
         }
         const char *requested=getenv("DOOM_TEST_WEAPON");
@@ -711,6 +1158,7 @@ void I_TestFrame(void)
         P_RemoveMobj(shooter);
         if(enemy_flashes!=1) I_Error("Smoke test: enemy shot did not notify flash renderer");
 #ifdef DOOM_RENDER3D
+        {extern void I_TestCombatPresentation(void);I_TestCombatPresentation();}
         /* Keep the projectile capture clear of the fixture shot's red pain tint. */
         players[0].damagecount=0;
         if(!getenv("DOOM_TEST_FIDGETS"))P_SpawnPlayerMissile(player,MT_BRUISERSHOT);
@@ -846,6 +1294,3 @@ int main(int argc, char **argv)
     D_DoomMain();
     return 0;
 }
-
-
-

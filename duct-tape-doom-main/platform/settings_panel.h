@@ -17,6 +17,7 @@ using OptionCondition=bool(*)(const Settings&);
 struct Option {
     OptionKind kind;
     const char *key,*title,*tip; // key: the graphics.cfg name
+    const char *cost=nullptr;       // Approximate performance note, shown on selection
     int *flag=nullptr;              // Check and Choice
     std::vector<const char*> items; // Choice: one item per entry in values; Slider: a label per step, if any
     std::vector<int> values;

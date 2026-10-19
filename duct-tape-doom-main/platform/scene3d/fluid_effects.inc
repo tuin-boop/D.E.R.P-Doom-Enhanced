@@ -93,7 +93,19 @@ void fluidBFGHit(mobj_t *ball,mobj_t *victim) {
     float bx=units(ball->x),by=units(ball->y),bz=units(ball->z)+5,dx=x-bx,dy=y-by,dz=z+h*.5f-bz,len=std::sqrt(dx*dx+dy*dy+dz*dz);
     for(float d=3;d<len;d+=3){float f=d/len;fluidParticle(bx+dx*f+randomRange(-1,1),by+dy*f+randomRange(-1,1),bz+dz*f,12,true,{.39f,1,.39f},20,2,0,0,0,0,.3f);}
 }
+extern "C" int p_diglastchanged;
 void fluidProjectileImpact(mobj_t *mo) {
+    if(mo&&mo->type==MT_ROCKET&&p_diglastchanged>0){
+        dropOldLevelImpacts();
+        float dx=units(mo->momx),dy=units(mo->momy),len=std::max(.01f,std::hypot(dx,dy));
+        float x=units(mo->x)-dx/len*3,y=units(mo->y)-dy/len*3,z=units(mo->z),now=gameSeconds();
+        if(debris.size()>480)debris.erase(debris.begin(),debris.begin()+(debris.size()-480));
+        for(int i=0;i<12;++i){float gray=randomRange(.28f,.63f);
+            debris.push_back({x,y,z+randomRange(-8,12),-dx/len*randomRange(30,110)+randomRange(-45,45),
+                -dy/len*randomRange(30,110)+randomRange(-45,45),randomRange(30,100),now,
+                randomRange(.7f,1.6f),randomRange(1,3.5f),{gray,gray*.98f,gray*.94f}});
+        }
+    }
     if(!settings.fluidWeapons||!mo||!mo->target||!mo->target->player)return;
     if(mo->type!=MT_ROCKET&&mo->type!=MT_PLASMA&&mo->type!=MT_BFG)return;
     resetFluidEffects();
@@ -180,13 +192,13 @@ static void drawFluidEffects(const Uniforms &camera) {
     for(const auto &m:fluidMarks){int lump=fluidImage(m.mask);const auto &im=fluidMasks[m.mask];
         float alpha=std::clamp((m.life-(now-m.born))/(m.life-m.fadeStart),0.f,1.f)*(m.mask<5?.85f:1.f);
         auto &out=decalBatches[lump];float hw=im.w*m.size*.5f,hh=im.h*m.size*.5f;
-        if(m.line>=0){WallSpan span;if(!wallSpan(lines[m.line],m.side,m.section,span))continue;
+        if(m.line>=0){float excavation[4];if(P_GlobalDigEnabled()&&P_GlobalDigBounds(m.line,m.side,excavation))continue;WallSpan span;if(!wallSpan(lines[m.line],m.side,m.section,span))continue;
             float dx=span.b.x-span.a.x,dy=span.b.y-span.a.y,len=std::hypot(dx,dy),zc=span.anchor+m.z;
             float u0=std::max(0.f,m.u-hw),u1=std::min(len,m.u+hw),z0=std::max(span.bottom,zc-hh),z1=std::min(span.top,zc+hh);
             if(u0>=u1||z0>=z1)continue;
             auto v=[&](float u,float z){float tu=(u-m.u+hw)/m.size;Vertex a={span.a.x+dx/len*u+dy/len*.1f,span.a.y+dy/len*u-dx/len*.1f,z,m.flip?im.w-tu:tu,(zc+hh-z)/m.size,alpha,0};a.red=m.color[0];a.green=m.color[1];a.blue=m.color[2];return a;};
             quad(out,v(u0,z1),v(u1,z1),v(u1,z0),v(u0,z0));
-        }else{const auto &sec=sectors[m.sector];float z=m.ceiling?ceilZ(&sec)-.1f:floorZ(&sec)+.1f;
+        }else{float excavation[4];if(P_GlobalDigFlatBounds(m.sector,m.ceiling,excavation)&&m.u+m.size*64>=excavation[0]&&m.u-m.size*64<=excavation[1]&&m.z+m.size*64>=excavation[2]&&m.z-m.size*64<=excavation[3])continue;const auto &sec=sectors[m.sector];float z=m.ceiling?ceilZ(&sec)-.1f:floorZ(&sec)+.1f;
             if((m.ceiling?sec.ceilingpic:sec.floorpic)==skyflatnum)continue;
             std::vector<Point> square={{m.u-hw,m.z-hh},{m.u+hw,m.z-hh},{m.u+hw,m.z+hh},{m.u-hw,m.z+hh}};
             for(int leaf:sectorFloors[m.sector]){auto polygon=floors[leaf];for(int k=0;k<4&&!polygon.empty();++k){auto a=square[k],b=square[(k+1)%4];polygon=clip(polygon,a,{b.x-a.x,b.y-a.y},false);}

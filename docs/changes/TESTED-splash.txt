@@ -1,0 +1,18 @@
+2026-10-19: Monster-contact surface damage and moving doors
+
+Ready launcher: DERP-Destruction.exe (all three bundled mods included).
+Rocket actor contacts now apply distance-attenuated excavation to nearby floors,
+ceilings and exposed walls within 64 map units. Wall rays reject intervening
+solid geometry. This uses the existing breakable-surfaces toggle.
+Door wall cuts store their owning floor/ceiling plane and move with that plane;
+anchors persist in the optional ANC1 save extension. Older cuts without anchors
+remain at their saved world coordinates.
+Flat render tessellation now shares the collision field's four-unit lattice.
+Some visible speckling remains in the stress-test crater and is not claimed fixed.
+
+Validation: Release engine and launcher compiled. Native surface suite passed
+near/far monster splash, nearby wall splash, moving door and anchor save/load,
+real floor/ceiling missiles, toggle/collision, depth limits and thickness checks.
+Bundled native regression suite passed through level transition.
+Logs: test-surfaces/splash-check.log; test-bundled/splash-regression.log.
+Production dist/DuctTapeDoom.exe unchanged (SHA256 B0A5A971AA6DC0E8C601F041260FA077718C814EFF9CD39708684E76F2F655CE).

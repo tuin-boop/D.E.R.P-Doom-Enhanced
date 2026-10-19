@@ -116,7 +116,8 @@ extern void (*R_DoorMotion)(sector_t *sector);
 extern void (*R_DoorDamage)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z, int broken);
 extern void (*R_WallImpact)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z);
 // Renderer-only hitscan blood: x,y,z is the blood spot, dx,dy the shot direction.
-extern void (*R_BloodHit)(mobj_t *target, fixed_t x, fixed_t y, fixed_t z, fixed_t dx, fixed_t dy, int damage);
+extern void (*R_DamageHit)(mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage);
+extern void (*R_BloodHit)(mobj_t *target, fixed_t x, fixed_t y, fixed_t z, fixed_t dx, fixed_t dy, int damage, fixed_t slope, const mobj_t *shooter);
 // Renderer-only hitscan floor or ceiling impact (la_freeaim shots); true when
 // the renderer shows it as a splash, so no puff is spawned.
 extern boolean (*R_PlaneImpact)(sector_t *sector, boolean ceiling, fixed_t x, fixed_t y, fixed_t z);

@@ -2,18 +2,23 @@
    batched per texture. */
 #include "internal.h"
 #include "frame_workers.h"
+#include "p_digwall.h"
 
 namespace doom3d {
 bool customGunPuff(const mobj_t *puff);
 void quad(std::vector<Vertex> &out,Vertex a,Vertex b,Vertex c,Vertex d) {
     out.insert(out.end(),{a,b,c,a,c,d});
 }
+#include "dig_mesh.inc"
+#include "dig_wall_mesh.inc"
+#include "dig_flat_mesh.inc"
 static void addWall(const line_t &line,int side,Point a,Point b,float bottom,float top,int tex,float anchor,float light,bool facing,int span) {
     wallLights(line,side,a,b,bottom,top,tex,anchor,span);
     if(!facing)return;
     if(tex<=0||top<=bottom) return;
     tex=texturetranslation[tex]; wallImage(tex);
     float u=units(sides[line.sidenum[side]].textureoffset),len=std::hypot(b.x-a.x,b.y-a.y);
+    if(addExcavatedWall(line,side,span,a,b,bottom,top,tex,anchor,light))return;
     auto &out=batches[tex];unsigned mode=sectorMode(sides[line.sidenum[side]].sector);
     size_t first=out.size();
     Vertex corners[4]={{a.x,a.y,top,u,anchor-top,light,mode},{b.x,b.y,top,u+len,anchor-top,light,mode},
@@ -106,7 +111,7 @@ static void visibleLeaves(const Uniforms &camera,const std::vector<char> &candid
                 float span=std::remainder(a1-a2,2*(float)doomPi);
                 if(span>0){
                     if(mapLines&&!view.hidden(a2,span))seg.linedef->flags|=ML_MAPPED;
-                    if(solid)view.cover(a2,span);
+                    if(solid&&!P_GlobalDigBreachFace(int(seg.linedef-lines),seg.sidedef==&sides[seg.linedef->sidenum[0]]?0:1))view.cover(a2,span);
                 }
             }
             return;
@@ -179,6 +184,7 @@ static void flatGeometry(const std::vector<float> &skyTop) {
     for(int i=0;i<numsubsectors;++i) {
         const auto &poly=floors[i]; if(poly.size()<3) continue;
         const sector_t *sector=subsectors[i].sector;
+        if(digMeshEnabled()&&sector->tag==19001)continue;
         for(int ceiling=0;ceiling<2;++ceiling) {
             int flat=ceiling?sector->ceilingpic:sector->floorpic;
             if(flat==skyflatnum) {
@@ -192,6 +198,7 @@ static void flatGeometry(const std::vector<float> &skyTop) {
             unsigned mirror=reflectionActive&&!ceiling&&sectorMist[sector-sectors].reflective&&std::abs(z-reflectionPlane)<0.5f?MODE_MIRROR_FLOOR:0;
             if(!ceiling&&sectorMist[sector-sectors].liquid)mirror|=MODE_LIQUID;
 
+            if(addExcavatedFlat(i,ceiling,-1-lump,z,light,mirror|sectorMode(sector)))continue;
             auto &out=batches[-1-lump];size_t first=out.size();
             if(!addBrokenFlat(out,i,int(sector-sectors),ceiling,lumpImage(lump,true),z,light,mirror|sectorMode(sector)))
                 for(size_t n=1;n+1<poly.size();++n) for(Point p:{poly[0],poly[n],poly[n+1]})
@@ -213,6 +220,7 @@ static void wallGeometry(const Uniforms &camera,const std::vector<float> &skyTop
     };
     for(int i=0;i<numlines;++i) {
         const line_t &line=lines[i];
+        if(digMeshEnabled()&&((line.frontsector&&line.frontsector->tag==19001)||(line.backsector&&line.backsector->tag==19001)))continue;
         for(int side=0;side<2;++side) {
             if(line.sidenum[side]<0) continue;
             const side_t &s=sides[line.sidenum[side]];
@@ -220,6 +228,7 @@ static void wallGeometry(const Uniforms &camera,const std::vector<float> &skyTop
             Point a={units((side?line.v2:line.v1)->x),units((side?line.v2:line.v1)->y)};
             Point b={units((side?line.v1:line.v2)->x),units((side?line.v1:line.v2)->y)};
             bool facing=allSides||(b.x-a.x)*(camera.eye[1]-a.y)-(b.y-a.y)*(camera.eye[0]-a.x)<=0;
+            if(!facing&&P_GlobalDigEnabled()){float damage[4];facing=P_GlobalDigBounds(i,side,damage)!=0;}
             float floor=floorZ(front),ceil=ceilZ(front),row=units(s.rowoffset),light=lighting(front);
             if(std::abs(b.y-a.y)<0.01) light=std::max(0.1f,light-0.04f);
             if(std::abs(b.x-a.x)<0.01) light=std::min(1.0f,light+0.04f);
@@ -328,28 +337,42 @@ static void addThing(mobj_t *thing,int i,const Uniforms &camera,float fraction,c
     bool self=thing==players[displayplayer].mo;
     if((self&&!mirror)||thing->sprite<0||thing->sprite>=numsprites) return;
     if(customGunPuff(thing))return;
-    const auto &sprite=sprites[thing->sprite]; int frame=thing->frame&FF_FRAMEMASK;
+    DeathView death={thing->sprite,thing->frame,thing->angle,false,1,0,{}};
+    bool directed=!self&&settings.deathDirector&&deathView(*thing,fraction,death);
+    if(death.sprite<0||death.sprite>=numsprites)return;
+    const auto &sprite=sprites[death.sprite]; int frame=death.frame&FF_FRAMEMASK;
     if(frame>=sprite.numframes) return;
     const auto &sf=sprite.spriteframes[frame];
-    auto rotationFrom=[&](const float *eye){return sf.rotate?spriteRotation(units(thing->x)-eye[0],units(thing->y)-eye[1],thing->angle):0u;};
+    auto rotationFrom=[&](const float *eye){return sf.rotate&&!death.fall.active?spriteRotation(units(thing->x)-eye[0],units(thing->y)-eye[1],death.facing):0u;};
+    auto flipped=[&](unsigned seen){return (bool)sf.flip[seen]!=death.mirror;};
     unsigned rotation=rotationFrom(camera.eye);
     int lump=firstspritelump+sf.lump[rotation]; Image &image=lumpImage(lump,false);
     float x,y,z;interpolatedPosition(*thing,fraction,x,y,z);
-    if(!self)addEnemyShadow(*thing,image,lump,sf.flip[rotation],x,y,z,camera);
-    if(!self&&beam&&!(thing->flags&(MF_MISSILE|MF_NOBLOCKMAP|MF_SPECIAL))&&(thing->flags&(MF_SOLID|MF_SHOOTABLE))&&!(thing->frame&FF_FULLBRIGHT))
-        casters.push_back({thing,&image,lump,(bool)sf.flip[rotation],x,y,z,std::hypot(x-camera.eye[0],y-camera.eye[1])});
+    // Hit flinches and death jolts (body_motion.cpp): drawn in strips, a hop lifts the body.
+    // A directed death scales the jolt by its phase and adds the landing's settle.
+    BodyPose pose;bool posed=!self&&!death.fall.active&&(thing->flags&MF_COUNTKILL)&&bodyPose(*thing,fraction,pose);
+    if(directed) {
+        if(!posed)pose={};
+        for(int k=0;k<2;++k){pose.lean[k]*=death.bend;pose.whip[k]*=death.bend;}
+        pose.squash*=death.bend;pose.flatten=death.settle;
+        posed=posed||death.settle>0;
+    }
+    if(posed)z+=pose.lift;
+    if(!self)addEnemyShadow(*thing,image,lump,flipped(rotation),x,y,z,camera);
+    if(!self&&beam&&!(thing->flags&(MF_MISSILE|MF_NOBLOCKMAP|MF_SPECIAL))&&(thing->flags&(MF_SOLID|MF_SHOOTABLE))&&!(death.frame&FF_FULLBRIGHT))
+        casters.push_back({thing,&image,lump,(bool)flipped(rotation),x,y,z,std::hypot(x-camera.eye[0],y-camera.eye[1])});
     auto pulse=lit.pulse,beamLight=lit.beam,baked=lit.baked;
     const auto &shadowLights=lit.shadows;
     const auto &statics=lit.statics;
     if(!self)for(const auto &light:shadowLights.lights)if(light.strength>0.025f)
-        addEnemyShadow(*thing,image,lump,sf.flip[rotation],x,y,z,camera,&light);
-    float light=lighting(&sectors[i],thing->frame&FF_FULLBRIGHT); unsigned mode=MODE_SPRITE|(thing->flags&MF_SHADOW?MODE_FUZZ:0);
+        addEnemyShadow(*thing,image,lump,flipped(rotation),x,y,z,camera,&light);
+    float light=lighting(&sectors[i],death.frame&FF_FULLBRIGHT); unsigned mode=MODE_SPRITE|(thing->flags&MF_SHADOW?MODE_FUZZ:0);
     // Per-pixel lighting from silhouette normals (flipped with a mirrored frame, below).
-    if(settings.detail&&!(thing->frame&FF_FULLBRIGHT))mode|=MODE_RELIT;
+    if(settings.detail&&!(death.frame&FF_FULLBRIGHT))mode|=MODE_RELIT;
     // Airborne blood shines like the floor blood (needs the normals of MODE_RELIT).
     if(settings.bloodShine&&thing->type==MT_BLOOD&&(mode&MODE_RELIT))mode|=MODE_WET_SPRITE;
     if(settings.glowingEyes&&(thing->flags&MF_COUNTKILL)&&thing->health>0)mode|=MODE_GLOWING_EYES;
-    if(!(thing->frame&FF_FULLBRIGHT))light=sunLightAt(x,y,&sectors[i],flowLightAt(x,y,&sectors[i],seamLightAt(x,y,&sectors[i],light)));
+    if(!(death.frame&FF_FULLBRIGHT))light=sunLightAt(x,y,&sectors[i],flowLightAt(x,y,&sectors[i],seamLightAt(x,y,&sectors[i],light)));
     // MODE_SOFT: effect sprites (shots, puffs, fogs) dither out at floors
     // and ceilings and draw in front of walls within half their width.
     bool soft=settings.softSprites&&((thing->flags&MF_MISSILE)||((thing->flags&MF_NOBLOCKMAP)&&(thing->flags&MF_NOGRAVITY)));
@@ -373,12 +396,12 @@ static void addThing(mobj_t *thing,int i,const Uniforms &camera,float fraction,c
         for(int c=0;c<3;++c)packedStatics|=(unsigned)std::lround((statics.towards[c]/towards*0.5f+0.5f)*255)<<(8*c);
         packedStatics|=(unsigned)std::lround(std::clamp(towards/statics.amount,0.0f,1.0f)*255)<<24;
     }
-    if(thing->frame&FF_FULLBRIGHT) pulse={};
-    unsigned tint=thing->frame&FF_FULLBRIGHT?0xFFFFFFFFu:packedLampTint(statics,light);
+    if(death.frame&FF_FULLBRIGHT) pulse={};
+    unsigned tint=death.frame&FF_FULLBRIGHT?0xFFFFFFFFu:packedLampTint(statics,light);
     // MODE_GROUNDED: grounding darkens the feet of things that rest on the floor.
     // Sprites have no sun map, so vSun carries strength and height above floor.
-    float lift=units(thing->z-thing->floorz),grounding=1-lift/32;
-    bool grounded=settings.detail&&grounding>0&&!(thing->frame&FF_FULLBRIGHT)&&!soft&&thing->type!=MT_BLOOD&&
+    float lift=units(thing->z-thing->floorz)+(posed?pose.lift:0),grounding=1-lift/32;
+    bool grounded=settings.detail&&grounding>0&&!(death.frame&FF_FULLBRIGHT)&&!soft&&thing->type!=MT_BLOOD&&
         !(thing->flags&(MF_SHADOW|MF_MISSILE|MF_SPAWNCEILING));
     // The quad for one view: that view's frame, facing along its right.
     auto emit=[&](std::map<int,std::vector<Vertex>> &out,unsigned seen,float rx,float ry,bool collar) {
@@ -393,13 +416,26 @@ static void addThing(mobj_t *thing,int i,const Uniforms &camera,float fraction,c
                 shift=std::min(shift,ceiling-top);
             top+=shift;bottom+=shift;
         }
+        float fittedFeet=top-image.top;
+        if(death.fall.active&&!death.fall.rig){
+            float keep=1-death.fall.flatten;
+            top=z+(image.top-death.fall.ground)*keep+death.fall.lift;
+            bottom=z+(image.top-image.height-death.fall.ground)*keep+death.fall.lift;
+        }
         float sink=sinkInLiquid(thing,i,image,x,y,camera,collar);top-=sink;bottom-=sink;
-        float u0=sf.flip[seen]?image.width:0,u1=sf.flip[seen]?0:image.width;
-        unsigned m=mode|((mode&MODE_RELIT)&&sf.flip[seen]?MODE_FLIPPED:0);
-        auto &vertices=out[-1-lump];
-        quad(vertices,{x+rx*left,y+ry*left,top,u0,0,light,m},{x+rx*right,y+ry*right,top,u1,0,light,m},
+        float u0=flipped(seen)?image.width:0,u1=flipped(seen)?0:image.width;
+        unsigned m=mode|((mode&MODE_RELIT)&&flipped(seen)?MODE_FLIPPED:0);
+        auto &vertices=out[-1-lump];size_t first=vertices.size();
+        if(collar&&!self)woundView(thing,players[displayplayer].mo,image,flipped(seen),x,y,fittedFeet-sink,top,bottom,rx,ry,posed?&pose:nullptr);
+        // Wound holes (wounds.cpp): texels shot through, and their rims.
+        std::vector<byte> holes;bool wounded=!self&&woundMask(*thing,image,flipped(seen),rx,ry,holes);
+        const std::vector<byte> *cut=wounded?&holes:nullptr;
+        if(death.fall.rig)fallQuads(vertices,{0,0,0,0,0,light,m},death.fall,x,y,fittedFeet-sink,rx,ry,flipped(seen),cut);
+        else if(posed)bodyQuads(vertices,pose,{0,0,0,0,0,light,m},x,y,fittedFeet-sink,rx,ry,left,right,image.top,image.height,u0,u1,cut);
+        else if(wounded)woundedQuads(vertices,{0,0,0,0,0,light,m},image,holes,x,y,top,rx,ry,flipped(seen),(top-bottom)/image.height);
+        else quad(vertices,{x+rx*left,y+ry*left,top,u0,0,light,m},{x+rx*right,y+ry*right,top,u1,0,light,m},
             {x+rx*right,y+ry*right,bottom,u1,(float)image.height,light,m},{x+rx*left,y+ry*left,bottom,u0,(float)image.height,light,m});
-        for(size_t n=vertices.size()-6;n<vertices.size();++n) {
+        for(size_t n=first;n<vertices.size();++n) {
             vertices[n].red=pulse[0];vertices[n].green=pulse[1];vertices[n].blue=pulse[2];vertices[n].statics=packedStatics;
             vertices[n].lampTint=tint;
             if(grounded) {vertices[n].mode|=MODE_GROUNDED;vertices[n].sunU=grounding;vertices[n].sunV=vertices[n].z-z+lift;}
@@ -469,6 +505,7 @@ void geometry(const Uniforms &camera,float fraction) {
     const auto &skyTop=skyTops(fraction);
     timing(2);flatGeometry(skyTop);timing(3);
     wallGeometry(camera,skyTop,planGlassCaptures(camera));
+    buildDigMesh();
     timing(4);collectSurfaceLights();timing(5);
     buildImpacts(camera);
     buildGlass(camera);
@@ -513,6 +550,7 @@ void geometry(const Uniforms &camera,float fraction) {
     timing(8);buildBlood(camera);
     buildHeat(camera);
     buildDust(camera);
+    buildEmbers(camera);
     buildBubbles(camera);timing(9);
     if(spike) {
         double sum=0;for(double t:current)sum+=t;

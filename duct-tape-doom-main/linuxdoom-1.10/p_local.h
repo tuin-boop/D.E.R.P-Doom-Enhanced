@@ -102,6 +102,7 @@ extern float tourpitch;
 extern boolean freeaim;
 // The next P_LineAttack is such a shot: it starts at the eye and also stops
 // on floors and ceilings. P_LineAttack clears it.
+extern void (*P_ShotTraced)(mobj_t *shooter,mobj_t *hit,fixed_t x1,fixed_t y1,fixed_t z1,fixed_t x2,fixed_t y2,fixed_t z2);
 extern boolean la_freeaim;
 
 

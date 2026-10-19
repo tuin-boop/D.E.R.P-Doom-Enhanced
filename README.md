@@ -1,15 +1,15 @@
-# D.E.R.P — Doom Enhanced
+# D.E.R.P — Doom Enhanced: Destruction Prototype
 
 A customized Windows build based on **Duct-Tape DOOM**, retaining its renderer and adding native Fluid Weapons/FluidMonsters support, performance improvements, a modern HUD, and gameplay presentation features.
 
-**[Download the latest Windows release](https://github.com/tuin-boop/D.E.R.P-Doom-Enhanced/releases/latest)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
+**[Download the destruction prototype](https://github.com/tuin-boop/D.E.R.P-Doom-Enhanced/releases/tag/destruction-2026.10.19)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
 
 ![Launcher artwork](launcher/hero.png)
 
 ## Getting started
 
-1. Download and extract `DuctTapeDoom-Windows.zip` from Releases.
-2. Run `DuctTapeDoom.exe` and select your own compatible Doom, Doom II, Final Doom, or Freedoom IWAD.
+1. Download `DERP-Destruction.exe` from the prototype release.
+2. Run `DERP-Destruction.exe` and select your own compatible Doom, Doom II, Final Doom, or Freedoom IWAD.
 3. Add any compatible map WADs, then click **PLAY DOOM**.
 4. Press **F4** for settings and bundled-mod toggles; **F5** opens the cheat/test menu.
 
@@ -17,7 +17,9 @@ The Windows launcher includes the engine and the supplied FluidWeapons, FluidWea
 
 ## Latest update
 
-Optional Persistent pursuit, Aggressive AI and Advanced tactics are now available under **F4 > Monster AI**, with difficulty warnings for the two combat modes. This update also adds lost-soul collision recovery, revised gun/projectile impacts and opening-door sparks. See the [update notes](docs/changes/UPDATE-2026-10-18-2.md) for details and validation.
+This branch contains the separate **destruction prototype**. Rockets excavate walls, floors and ceilings; optional wall and door breaches allow passage into valid rooms. The wall damage slider ranges from 100–500%, and optional deeper digging extends the depth limit from 256 to 1,024 units. See the [prototype notes and limitations](docs/changes/DESTRUCTION-2026-10-19.md).
+
+The stable release remains available separately. Door breaches can bypass keys and break map progression.
 
 ## Features added in this version
 

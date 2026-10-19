@@ -9,7 +9,7 @@ namespace doom3d {
 constexpr int bloodKeyBase=-0x40000000; // Image keys clear of walls and lumps.
 constexpr int bloodPool=0,bloodSplats=4;
 static std::vector<byte> bloodShades;static bool bloodShadesLoaded=false;
-static const std::vector<byte> &bloodPalette() {
+const std::vector<byte> &bloodPalette() {
     if(bloodShadesLoaded)return bloodShades;
     bloodShadesLoaded=true;
     if(SPR_BLUD>=numsprites)return bloodShades;
@@ -75,8 +75,10 @@ static void checkBloodLevel() {
 }
 // Hitscan blood: splats land on the floor a little past the hit after their
 // fall, and with harder hits the spray reaches a wall close behind.
-void bloodHit(mobj_t *target,fixed_t fx,fixed_t fy,fixed_t fz,fixed_t fdx,fixed_t fdy,int damage) {
+void bloodHit(mobj_t *target,fixed_t fx,fixed_t fy,fixed_t fz,fixed_t fdx,fixed_t fdy,int damage,fixed_t slope,const mobj_t *shooter) {
     shotThrough(target,fx,fy,fz,fdx,fdy,damage);
+    bodyHit(target,fx,fy,fz,fdx,fdy,damage);
+    woundHit(target,fx,fy,fz,fdx,fdy,slope,damage,shooter);
     if(!settings.blood||gamestate!=GS_LEVEL||floors.empty()||bloodPalette().empty())return;
     checkBloodLevel();
     float x=units(fx),y=units(fy),z=units(fz),dx=units(fdx),dy=units(fdy),length=std::hypot(dx,dy);

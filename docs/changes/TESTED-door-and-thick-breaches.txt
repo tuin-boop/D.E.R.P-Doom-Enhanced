@@ -1,0 +1,19 @@
+Door breaches and fourfold wall depth, 2026-10-19
+
+Ready launcher: DERP-Destruction.exe (all bundled mods included).
+F4 > Effects > Doors:
+- Through-wall breaches: maximum paired wall thickness now 256 map units (previously 64).
+- Breachable doors (can break maps): separate persistent toggle, default off. Works independently of Through-wall breaches. Both require Breakable surfaces.
+Door setting warns that locked doors can be bypassed, skipping keys/switches/progression and potentially breaking maps.
+Door aperture follows its ceiling anchor and combines with the normal opening as the door rises. Both face orientations are supported. Outside-map void remains sealed; paired opposing faces are required. Floor/ceiling through-breaches remain excluded.
+Strength accumulation ceiling raised for the opt-in modes without increasing damage per shot. Updated saved-wall strength validation. Legacy save format retained.
+Deep collision and rocket contact checks extended past the old 80-unit broad-phase cutoff. Fixed reverse entry from the exit room into a passage/closed door sector.
+
+Passed tests:
+- test-door-breaches/door-breaches.log: blue-key door refuses normal use without key, then breached with option enabled; separate toggle-off blocking, hitscan, sight, rocket, moving hole, occupied door raising/closing, save/load, two-way player passage.
+- test-thick-breaches/thick-breaches.log: vanilla E1M1 128-unit wall.
+- test-thick-breaches/max-breaches.log: local doubled-XY E1M1 fixture with a 256-unit slab, real rocket stopped/impacted at 156.5-unit partial depth; full aperture, hitscan, sight, rocket, save/load, two-way player passage.
+- test-surfaces/door-breach-regression.log: previous surface/crater suite.
+- test-bundled/door-breach-regression.log: bundled features, live option plumbing, save/load and level transition.
+Screenshots: test-door-breaches/breach-front.png and test-thick-breaches/breach-front.png.
+Production release untouched.

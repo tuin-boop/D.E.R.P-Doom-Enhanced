@@ -401,8 +401,10 @@ void I_Render3DSettingsDraw(unsigned *pixels) {
     drawSeparator(descriptionRow-1);
 
     const Option &option=selectedOption();
-    std::vector<std::string> lines=wrap(option.tip?option.tip:"",(rightColumn-leftColumn)*cellWidth,descriptionLines);
-    for(size_t i=0;i<lines.size();++i)drawText(lines[i],leftColumn,descriptionRow+(int)i,description);
+    int tipRow=descriptionRow,tipLines=descriptionLines;
+    if(option.cost){drawText(option.cost,leftColumn,tipRow,heading);++tipRow;--tipLines;}
+    std::vector<std::string> lines=wrap(option.tip?option.tip:"",(rightColumn-leftColumn)*cellWidth,tipLines);
+    for(size_t i=0;i<lines.size();++i)drawText(lines[i],leftColumn,tipRow+(int)i,description);
     std::string help="Up/Down select   Left/Right change   Tab page   R defaults   Esc done";
     drawTextAt(help,(width-textWidth(help))/2,helpRow,dim);
     if(panel.aiWarning){

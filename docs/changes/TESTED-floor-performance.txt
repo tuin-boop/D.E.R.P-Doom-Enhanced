@@ -1,0 +1,23 @@
+2026-10-19 floor/ceiling performance and liquid exclusion
+
+Sparse subdivision keeps four-unit detail near craters and coarse polygons in
+undamaged space, rather than tessellating the bounding rectangle between holes.
+Zero-area clipped triangles are discarded. Animated floor textures and reflection
+flags update without rebuilding geometry. Distant actors skip crater collision
+refresh; depth sampling stops once an unaffected support point is found.
+
+Stress test: 120 pairs of floor/ceiling impacts across E1M1. Before changes the
+flat geometry CPU stage averaged 23.184 ms across 128 frames. With the optimizations
+and before liquid exclusion it averaged 2.660 ms in the first window and 1.969 ms
+in the following steady window. These are CPU-stage timings, not total frame time.
+Texture-animation rebuilds stopped (23 repeated builds of some leaves before).
+Logs: test-surfaces/floor-stress-before.log and floor-stress-final.log.
+
+Liquid families NUKAGE/FWATER/SLIME/BLOOD/LAVA and sky are excluded from flat
+excavation. Old liquid craters are suppressed in rendering/collision too.
+Existing splash effects remain under their existing settings.
+Solid floors and ceilings, monster blast craters, and moving doors remain enabled.
+Native liquid exclusion, depth/toggle/collision/save/load and door tests passed:
+test-surfaces/liquid-check.log. Bundled regression passed through level transition:
+test-bundled/floor-perf-regression.log.
+Ready executable: DERP-Destruction.exe (all three mods embedded).

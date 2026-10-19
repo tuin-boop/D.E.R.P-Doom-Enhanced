@@ -54,3 +54,9 @@ Additional vendored libraries are miniz 3.1.0, stb_image/stb_vorbis (commit
 2c980bb59875b0d32144a71867fbdebb2f77cd20), and dr_mp3 (commit
 dfe8377631000664666519fdb83da193fd8037f4). Their source and licenses are in
 third_party. dr_mp3 provides streaming playback of SIGIL's MP3 music.
+
+## Selected upstream effects (19 October 2026)
+Body reactions, varied deaths, procedural falls, sprite wounds, torch embers,
+shoreline effects and synthesized bullet flybys were integrated/adapted from
+the user-supplied derp-main.zip. The upstream license is retained in LICENSE.TXT.
+The newer glass implementation was not imported.

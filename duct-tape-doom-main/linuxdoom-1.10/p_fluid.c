@@ -26,6 +26,7 @@ typedef struct walk_s {
 static walk_t *walks[1024];
 static mobj_t *stepping;
 static int divisor=1;
+extern fixed_t tmdropoffz;
 static unsigned bucket(mobj_t *actor){return (unsigned)((uintptr_t)actor>>4)&1023;}
 int p_fluidweapons=1,p_fluidmonsters=1;
 int P_FluidWeaponsEnabled(void){return p_fluidweapons&&M_CheckParm("-fluidweapons");}
@@ -59,6 +60,13 @@ int P_FluidChase(mobj_t *actor,actionf_p1 action){
        action for that state; do not add substeps after consuming the step.
        This also recovers affected actors in existing saves. */
     int overlap=!P_CheckPosition(actor,x,y);
+    /* Position checks accept intersecting sector boundaries; TryMove also
+       checks their vertical opening and step height. A short substep may
+       remain inside a raised floor even though the normal step clears it. */
+    if(!(actor->flags&MF_NOCLIP)&&
+       (tmfloorz-actor->z>24*FRACUNIT || tmceilingz-actor->z<actor->height ||
+        tmceilingz-tmfloorz<actor->height ||
+        (!(actor->flags&(MF_DROPOFF|MF_FLOAT))&&tmfloorz-tmdropoffz>24*FRACUNIT)))overlap=1;
     mobj_t *previous=stepping;int oldDivisor=divisor;stepping=actor;divisor=overlap?1:duration;
     action(actor);stepping=previous;divisor=oldDivisor;
     int64_t dx=(int64_t)actor->x-x,dy=(int64_t)actor->y-y;

@@ -182,18 +182,25 @@ int main(int argc, char **argv)
     const char *base = SDL_GetBasePath();
     char bundled[4096];
     snprintf(bundled, sizeof(bundled), "%sdefault.wad", base ? base : "./");
+    char materials[4096],graphics[4096],remembered[4096];
+    snprintf(materials,sizeof(materials),"%sDiggingMaterials.wad",base?base:"./");
+    snprintf(graphics,sizeof(graphics),"%sglobal-play/graphics.cfg",base?base:"./");
+    snprintf(remembered,sizeof(remembered),"%sglobal-play/iwad.txt",base?base:"./");
     int has_iwad = 0;
     char *selected_addon = NULL;
     for (int i = 1; i + 1 < argc; ++i)
         if (!strcmp(argv[i], "-iwad")) has_iwad = 1;
+    if(!has_iwad){FILE *stored=fopen(remembered,"r");
+        if(stored){char path[4096];if(fgets(path,sizeof(path),stored)){path[strcspn(path,"\r\n")]=0;FILE *check=fopen(path,"rb");if(check){fclose(check);selected_wad=SDL_strdup(path);}}fclose(stored);}
+    }
 #ifdef __APPLE__
-    if (argc == 1)
+    if (argc == 1&&!selected_wad)
     {
         if (!DOOM_ChooseWads(bundled, &selected_wad, &selected_addon))
         { SDL_Quit(); return 0; }
     }
 #else
-    if (!has_iwad && choose_from_folder(base ? base : "./", bundled, &selected_wad, &selected_addon) < 0)
+    if (!has_iwad && !selected_wad && choose_from_folder(base ? base : "./", bundled, &selected_wad, &selected_addon) < 0)
     { SDL_Quit(); return 0; }
 #endif
     if (!has_iwad && !selected_wad)
@@ -208,7 +215,7 @@ int main(int argc, char **argv)
             if (!selected_wad) { SDL_Quit(); return 0; }
         }
     }
-    char *preferences = SDL_GetPrefPath("Local Games", "DOOM");
+    char *preferences = SDL_GetPrefPath("Local Games", "DERP Destruction Prototype");
     if (!preferences)
     {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "DOOM", "Could not create the game save folder.", NULL);
@@ -236,22 +243,32 @@ int main(int argc, char **argv)
         if (file)
         {
             fputs("key_up 119\nkey_down 115\nkey_strafeleft 97\nkey_straferight 100\n"
-                  "key_use 32\nkey_fire 157\nmouse_sensitivity 5\n"
+                  "key_use 101\nkey_fire 157\nmouse_sensitivity 5\n"
                   "sfx_volume 10\nmusic_volume 7\nsnd_channels 16\n", file);
             fclose(file);
         }
     }
-    char **args = calloc((size_t)argc + 10, sizeof(char*));
+    char **args = calloc((size_t)argc + 24, sizeof(char*));
     if (!args) { SDL_Quit(); return 1; }
     int count = 0;
-    for (int i = 0; i < argc; ++i) args[count++] = argv[i];
+    int files=0,has_graphics=0,has_mode=0;
+    for (int i = 0; i < argc; ++i){
+        args[count++] = argv[i];
+        if(!strcmp(argv[i],"-file")){args[count++]=materials;files=1;}
+        if(!strcmp(argv[i],"-graphics"))has_graphics=1;
+        if(!strcmp(argv[i],"-digglobal")||!strcmp(argv[i],"-digging")||!strcmp(argv[i],"-nodigging"))has_mode=1;
+    }
+    if(!has_mode)args[count++]="-digglobal";
+    if(!has_graphics){args[count++]="-graphics";args[count++]=graphics;}
+    args[count++]="-fullscreen";
     if (!has_iwad) { args[count++] = "-iwad"; args[count++] = selected_wad; }
     if (selected_addon)
     {
         char *patch = companion_patch(selected_addon);
-        args[count++] = "-file"; args[count++] = selected_addon;
+        args[count++] = "-file"; args[count++] = materials; args[count++] = selected_addon; files=1;
         if (patch) { args[count++] = "-deh"; args[count++] = patch; }
     }
+    if(!files){args[count++]="-file";args[count++]=materials;}
     int has_config = 0;
     for (int i = 1; i + 1 < argc; ++i)
         if (!strcmp(argv[i], "-config")) has_config = 1;

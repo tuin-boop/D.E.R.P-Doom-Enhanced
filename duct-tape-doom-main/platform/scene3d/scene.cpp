@@ -8,9 +8,11 @@
 #include "toasty.h"
 #include "../mod_soundbank.h"
 extern "C" int p_fluidfastpistol;
+extern "C" int p_breakablewalls,p_throughwalls,p_breachdoors,p_wall_damage,p_deeperdig;
 extern "C" {
 #include "p_fluid.h"
 void I_SetFluidSoundAddon(int enabled);
+void I_SetNearMissSounds(int enabled);
 }
 extern "C" {
 extern int r_modernhud;
@@ -68,6 +70,7 @@ static void beforeTic() {
         {oldThings.emplace(thing,std::array<float,3>{units(thing->x),units(thing->y),units(thing->z)});fluidProjectileFlight(*thing);}
     tickImpactParticles();
     tickFluidEffects();
+    watchBodies();
     watchSplashes();
     watchGlass();
     watchShotLights();
@@ -81,6 +84,11 @@ static void acceleratedView(player_t *player) {
     }
 }
 void applySettings() {
+    p_breakablewalls=settings.breakableWalls;
+    p_throughwalls=settings.throughWalls;
+    p_breachdoors=settings.breachDoors;
+    p_deeperdig=settings.deeperDig;
+    p_wall_damage=std::clamp(settings.wallDamage,100,500);
     if(p_fluidweapons!=settings.fluidWeapons||p_fluidmonsters!=settings.fluidMonsters) {
         P_FluidReset();resetWeaponPositions();
     }
@@ -89,6 +97,7 @@ void applySettings() {
     P_SetAggressiveAI(settings.aggressiveAI);
     P_SetAdvancedTactics(settings.advancedTactics);
     I_SetFluidSoundAddon(settings.fluidSounds);
+    I_SetNearMissSounds(settings.nearMissSounds);
     p_fluidfastpistol=settings.fluidFastPistol;
     p_noticecombat=settings.combatNotices;
     if(gameWindow&&bool(SDL_GetWindowFlags(gameWindow)&SDL_WINDOW_FULLSCREEN)!=bool(settings.fullscreen))
@@ -105,6 +114,7 @@ void applySettings() {
     R_DoorMotion=settings.accelerated?doorMotion:nullptr;
     R_DoorDamage=nullptr;
     R_WallImpact=settings.accelerated?wallImpact:nullptr;
+    R_DamageHit=settings.accelerated?bodyDamaged:nullptr;
     R_BloodHit=settings.accelerated?bloodHit:nullptr;
     R_PlaneImpact=settings.accelerated?planeImpact:nullptr;
     R_ShotPassed=settings.accelerated?glassShot:nullptr;
@@ -138,13 +148,13 @@ void sceneInit(SDL_Window *window) {
 void sceneShutdown() {
     toastyTexture.reset();toastyVisible=0;
     stopRelight();
-    R_AcceleratedView=nullptr;R_BeforeTic=nullptr;R_MuzzleFlash=nullptr;R_WallImpact=nullptr;R_RocketImpact=nullptr;R_BFGHit=nullptr;R_DoorMotion=nullptr;R_DoorDamage=nullptr;R_BloodHit=nullptr;R_PlaneImpact=nullptr;R_ShotPassed=nullptr;r_uncapped=0;v_overlayactive=0;
+    R_AcceleratedView=nullptr;R_BeforeTic=nullptr;R_MuzzleFlash=nullptr;R_WallImpact=nullptr;R_RocketImpact=nullptr;R_BFGHit=nullptr;R_DoorMotion=nullptr;R_DoorDamage=nullptr;R_DamageHit=nullptr;R_BloodHit=nullptr;R_PlaneImpact=nullptr;R_ShotPassed=nullptr;r_uncapped=0;v_overlayactive=0;
     lightBlockers.clear();flashes={};oldThings.clear();oldHeights.clear();
     batches.clear();shadowBatches.clear();decalBatches.clear();effectBatches.clear();effectAddBatches.clear();mirrorBatches.clear();particleVertices.clear();
     mistVertices.clear();skyVertices.clear();shaftVertices.clear();heatVertices.clear();
     imagesShutdown();mapShutdown();causticsShutdown();clearSurfaceLights();lightsShutdown();exposureShutdown();
     bakeAtlasShutdown();sunShutdown();lightBakeShutdown();clearStaticGrid();indirectShutdown();
-    impactsShutdown();bloodShutdown();splashesShutdown();glassShutdown();shotLightsShutdown();
+    bodyMotionShutdown();impactsShutdown();bloodShutdown();splashesShutdown();glassShutdown();shotLightsShutdown();
 }
 // A new level, or the first after shutdown: each part forgets the last
 // level, then the map and what is built from it at level load.
@@ -155,7 +165,9 @@ static void startLevel() {
     bakeAtlasNewLevel();sunNewLevel();lightBakeNewLevel();clearStaticGrid();indirectNewLevel();
     oldThings.clear();oldHeights.clear();tickTime=0;
     resetWeaponPositions();
+    bodyMotionShutdown();
     buildMap();
+    prepareFalls();
     buildCaustics();
     buildShore();
     layoutBake();
@@ -273,7 +285,7 @@ FrameView prepareFrame(int w,int h) {
         (settings.detail&&settings.variedHighlights?FEATURE_VARIED_HIGHLIGHTS:0)|
         (settings.windowLight&&bakedLightsActive?FEATURE_WINDOW_LIGHT:0)|
         (settings.detail&&settings.unevenTiles?FEATURE_UNEVEN_TILES:0)|(settings.detail&&settings.unevenWalls?FEATURE_UNEVEN_WALLS:0)|
-        (settings.classicFlashlight?FEATURE_CLASSIC_FLASHLIGHT:0)|(settings.stippledShadows?FEATURE_STIPPLED_SHADOWS:0);
+        (settings.classicFlashlight?FEATURE_CLASSIC_FLASHLIGHT:0)|(settings.stippledShadows?FEATURE_STIPPLED_SHADOWS:0)|(settings.glowEdges&&shoreTexture&&causticPattern?FEATURE_GLOW_EDGES:0);
     camera.flashlightTint[3]=(float)features; // see shaders/feature_flags.h
     camera.map[0]=mapOrigin[0];camera.map[1]=mapOrigin[1];camera.map[2]=1/mapCell;
     camera.map[3]=settings.softLight&&seamTexture&&worldPending;
@@ -489,6 +501,21 @@ void I_Render3DStartFrame(void) {worldPending=false;v_overlayactive=false;}
 #ifdef DOOM_TEST_DRIVER
 extern "C" void I_TestBundledModSettings() {
     int weapons=settings.fluidWeapons,sounds=settings.fluidSounds,monsters=settings.fluidMonsters;
+    int digSetting=settings.breakableWalls;
+    for(int value=0;value<2;++value){settings.breakableWalls=value;applySettings();if(p_breakablewalls!=value)I_Error((char*)"Breakable walls live toggle failed");}
+    settings.breakableWalls=digSetting;applySettings();
+    int throughSetting=settings.throughWalls;
+    for(int value=0;value<2;++value){settings.throughWalls=value;applySettings();if(p_throughwalls!=value)I_Error((char*)"Through-wall breach live toggle failed");}
+    settings.throughWalls=throughSetting;applySettings();
+    int doorsSetting=settings.breachDoors;
+    for(int value=0;value<2;++value){settings.breachDoors=value;applySettings();if(p_breachdoors!=value)I_Error((char*)"Door breach live toggle failed");}
+    settings.breachDoors=doorsSetting;applySettings();
+    int damageSetting=settings.wallDamage;
+    for(int value:{100,250,500}){settings.wallDamage=value;applySettings();if(p_wall_damage!=value)I_Error((char*)"Wall damage live setting failed");}
+    settings.wallDamage=damageSetting;applySettings();
+    int deeperSetting=settings.deeperDig;
+    for(int value=0;value<2;++value){settings.deeperDig=value;applySettings();if(p_deeperdig!=value)I_Error((char*)"Deeper digging live toggle failed");}
+    settings.deeperDig=deeperSetting;applySettings();
     int aggressiveSetting=settings.aggressiveAI;
     for(int value=0;value<2;++value){settings.aggressiveAI=value;applySettings();if(p_aggressiveai!=value)I_Error((char*)"Aggressive AI live toggle failed");}
     settings.aggressiveAI=aggressiveSetting;applySettings();
@@ -536,3 +563,56 @@ void I_Render3DProfileTeleported(void) {surfaceSelection.clear();surfaceLightTim
 void I_Render3DScreenshotTo(const char *path) {profile.screenshotPath=path;screenshotPending=true;}
 
 
+
+// Regression fixture invoked by the GPU smoke harness with a real WAD loaded.
+extern "C" void I_TestCombatPresentation(void) {
+    using namespace doom3d;
+    Settings saved=settings;int oldtime=leveltime;
+    settings.hitFlinch=settings.deathMotion=settings.deathDirector=settings.deathFalls=settings.wounds=1;
+    mobj_t *player=players[consoleplayer].mo;
+    const int types[]={MT_POSSESSED,MT_SHOTGUY,MT_CHAINGUY,MT_TROOP,MT_SERGEANT,MT_HEAD,MT_KNIGHT,MT_BRUISER,MT_UNDEAD,MT_VILE,MT_FATSO};
+    int directed=0,procedural=0;
+    for(int type:types){
+        mobj_t *actor=P_SpawnMobj(player->x+96*FRACUNIT,player->y,ONFLOORZ,(mobjtype_t)type);
+        watchBodies();int health=actor->health;
+        P_DamageMobj(actor,player,player,5);++leveltime;watchBodies();
+        ++leveltime;BodyPose pose;if(!bodyPose(*actor,0.5f,pose))I_Error((char*)"Hit reaction missing");
+        if(actor->health!=health-5)I_Error((char*)"Presentation changed damage");
+        P_DamageMobj(actor,player,player,actor->health+1);++leveltime;watchBodies();
+        for(int tick=0;tick<8;++tick){
+            DeathView view={actor->sprite,actor->frame,actor->angle,false,1,0,{}};
+            if(deathView(*actor,0.5f,view)){
+                ++directed;if(view.fall.active)++procedural;
+                if(view.fall.rig){std::vector<Vertex> vertices;fallQuads(vertices,{},view.fall,0,0,0,1,0,false);if(vertices.empty())I_Error((char*)"Procedural fall has no geometry");}
+            }
+            ++leveltime;
+        }
+        P_RemoveMobj(actor);watchBodies();
+    }
+    if(!directed||!procedural)I_Error((char*)"Varied/procedural deaths not exercised");
+    settings=saved;leveltime=oldtime;bodyMotionShutdown();
+    printf("Combat presentation: real monster damage, flinches, varied deaths and procedural geometry passed.\n");
+}
+
+extern "C" void I_TestEffectsPreview(int t){
+    using namespace doom3d;static mobj_t *actors[3]={};
+    static int last=-1;if(t==last)return;last=t;players[consoleplayer].cheats|=CF_GODMODE;
+    mobj_t *p=players[consoleplayer].mo;if(!p)return;
+    float angle=(float)(p->angle*(2*doomPi/4294967296.0)),dx=std::cos(angle),dy=std::sin(angle);
+    if(t==20){
+        int types[]={MT_TROOP,MT_POSSESSED,MT_SHOTGUY};
+        for(int i=0;i<3;++i){float side=(i-1)*48.f;
+            actors[i]=P_SpawnMobj(p->x+(fixed_t)((dx*128-dy*side)*FRACUNIT),p->y+(fixed_t)((dy*128+dx*side)*FRACUNIT),ONFLOORZ,(mobjtype_t)types[i]);
+            actors[i]->angle=p->angle+ANG180;actors[i]->reactiontime=1000;
+        }
+    }
+    if(t==35)for(mobj_t *a:actors){
+        bloodHit(a,a->x,a->y,a->z+32*FRACUNIT,(fixed_t)(dx*FRACUNIT),(fixed_t)(dy*FRACUNIT),5,0,p);
+        P_DamageMobj(a,p,p,5);a->target=nullptr;a->momx=a->momy=0;
+    }
+    if(t==55)for(int i=1;i<3;++i){P_DamageMobj(actors[i],p,p,actors[i]->health+1);actors[i]->momx=actors[i]->momy=0;}
+    if(t==40||t==60||t==68){
+        static char path[1024];snprintf(path,sizeof(path),"%s/effects-%d.png",getenv("DOOM_EFFECTS_OUT"),t);I_Render3DScreenshotTo(path);
+    }
+    if(t>=80)I_Quit();
+}

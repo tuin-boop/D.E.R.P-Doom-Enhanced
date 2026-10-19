@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "doomdef.h"
+#include "p_local.h"
+#include "audio/flyby.h"
 #include "doomstat.h"
 #include "i_sound.h"
 #include "i_mixer_music.h"
@@ -172,8 +174,18 @@ void I_SetFluidSoundAddon(int enabled) {
     }
     fluid_sound_addon=enabled;ModSounds_UseAddon(enabled);
 }
+static int near_miss_sounds=1;
+void I_SetNearMissSounds(int enabled){near_miss_sounds=enabled!=0;}
+static void play_kind(int kind,float x,float y,float z,float level);
+static void shot_traced(mobj_t *shooter,mobj_t *hit,fixed_t x1,fixed_t y1,fixed_t z1,fixed_t x2,fixed_t y2,fixed_t z2){
+    static int last=-1;float x,y,z,level;
+    if(!near_miss_sounds||gametic==last)return;
+    if(!Flyby_Near(players[consoleplayer].mo,shooter,hit,x1/(float)FRACUNIT,y1/(float)FRACUNIT,z1/(float)FRACUNIT,x2/(float)FRACUNIT,y2/(float)FRACUNIT,z2/(float)FRACUNIT,&x,&y,&z,&level))return;
+    last=gametic;play_kind(IMPACT_FLYBY,x,y,z,level);
+}
 void I_InitSound(void)
 {
+    P_ShotTraced=shot_traced;
     if (M_CheckParm("-nosound")) return;
     int packs=M_CheckParm("-modsounds");
     if(packs) {
@@ -209,6 +221,7 @@ void I_InitSound(void)
 }
 void I_ShutdownSound(void)
 {
+    P_ShotTraced=NULL;
     SDL_DestroyAudioStream(stream); stream = NULL;
     memset(channels,0,sizeof(channels));S_WeaponSound=NULL;ModSounds_Clear();
     SDL_QuitSubSystem(SDL_INIT_AUDIO);

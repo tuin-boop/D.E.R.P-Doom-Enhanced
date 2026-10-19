@@ -1,6 +1,7 @@
 /* Bullet impacts and explosions: wall and floor decals, scorches and
    debris. */
 #include "internal.h"
+#include "p_digwall.h"
 
 namespace doom3d {
 // Hitscan wall impacts leave fading bullet marks and a short burst of debris

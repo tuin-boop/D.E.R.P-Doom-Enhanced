@@ -78,6 +78,8 @@ set(DOOM_SOURCES
     linuxdoom-1.10/p_map.c
     linuxdoom-1.10/p_maputl.c
     linuxdoom-1.10/p_mobj.c
+    linuxdoom-1.10/p_dig.c
+    linuxdoom-1.10/p_digwall.c
     linuxdoom-1.10/p_plats.c
     linuxdoom-1.10/p_pspr.c
     linuxdoom-1.10/p_saveg.c
@@ -208,7 +210,7 @@ if(DOOM_BUILD_SDL)
     # sounds of lamps, screens, liquids and fire, dry and in rooms:
     # doom-sfx-render <wad> [-kind name|ambient|all] [-room dry|room|hall|all] [-rate 11025] [-level 0.6] [-gun on|off] [-out dir]
     add_executable(doom-sfx-render tests/sfx_render.c platform/audio/impact_synth.c platform/audio/spark_synth.c
-        platform/audio/glass_synth.c platform/audio/fracture_synth.c platform/audio/step_synth.c platform/audio/ambient_synth.c platform/audio/machine_synth.c
+        platform/audio/glass_synth.c platform/audio/fracture_synth.c platform/audio/step_synth.c platform/audio/flyby_synth.c platform/audio/ambient_synth.c platform/audio/machine_synth.c
         platform/audio/liquid_synth.c platform/audio/fire_synth.c platform/audio/resample.c platform/audio/reverb.c)
     target_include_directories(doom-sfx-render PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/platform")
     if(NOT WIN32)
@@ -222,7 +224,14 @@ if(DOOM_BUILD_SDL)
         platform/scene3d/bake_lights.cpp
         platform/scene3d/bake_sun.cpp
         platform/scene3d/blood.cpp
+        platform/scene3d/body_motion.cpp
+        platform/scene3d/death_director.cpp
+        platform/scene3d/death_falls.cpp
+        platform/scene3d/wounds.cpp
+        platform/scene3d/embers.cpp
+
         platform/scene3d/caustics.cpp
+        platform/scene3d/liquid_edges.cpp
         platform/scene3d/config.cpp
         platform/scene3d/exposure.cpp
         platform/scene3d/geometry.cpp
@@ -270,7 +279,7 @@ if(DOOM_BUILD_SDL)
     # and the made-up sounds: impacts and the ambience read from the map's textures.
     set(DOOM_AUDIO_SOURCES platform/audio/map.c platform/audio/occlusion.c platform/audio/resample.c platform/audio/reverb.c platform/audio/room.c
         platform/audio/treble.c platform/audio/made_bank.c platform/audio/ambience.c platform/audio/ambience_map.c platform/audio/ambience_voices.c platform/audio/acoustic_graph.c platform/audio/steps.c
-        platform/audio/impact_synth.c platform/audio/spark_synth.c platform/audio/glass_synth.c platform/audio/fracture_synth.c platform/audio/step_synth.c
+        platform/audio/impact_synth.c platform/audio/spark_synth.c platform/audio/glass_synth.c platform/audio/fracture_synth.c platform/audio/step_synth.c platform/audio/flyby_synth.c platform/audio/flyby.c
         platform/audio/ambient_synth.c platform/audio/machine_synth.c platform/audio/liquid_synth.c platform/audio/fire_synth.c)
     add_executable(doom MACOSX_BUNDLE platform/sdl_main.c platform/i_sdl_video.c
         platform/i_sdl_sound.c platform/i_music.c platform/audio/mixer_music.c platform/i_singleplayer.c ${DOOM_AUDIO_SOURCES}
@@ -423,6 +432,14 @@ if(BUILD_TESTING)
     add_test(NAME frame-lighting-workers COMMAND doom-frame-worker-tests)
     target_compile_features(doom-baked-lighting-tests PRIVATE cxx_std_17)
     add_test(NAME baked-lighting-rays COMMAND doom-baked-lighting-tests)
+        add_executable(doom-wound-attachment-tests tests/wound_attachment.cpp)
+        target_compile_features(doom-wound-attachment-tests PRIVATE cxx_std_17)
+        add_test(NAME wound-animation-attachment COMMAND doom-wound-attachment-tests)
+        add_executable(doom-wounds-tests tests/wounds.cpp platform/scene3d/wounds.cpp)
+        target_compile_features(doom-wounds-tests PRIVATE cxx_std_17)
+        target_include_directories(doom-wounds-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/linuxdoom-1.10")
+        target_link_libraries(doom-wounds-tests PRIVATE doom_options SDL3::SDL3)
+        add_test(NAME wound-hit-placement COMMAND doom-wounds-tests)
     if(APPLE)
         enable_language(CXX)
         add_executable(doom-surface-lighting-tests tests/surface_lighting.cpp)
@@ -442,6 +459,13 @@ if(BUILD_TESTING)
     add_test(NAME screen-glass-detection COMMAND doom-screen-glass-tests)
     add_executable(doom-wad-probe-tests tests/wad_probe.c platform/wad_probe.c)
     add_test(NAME wad-loader-probe COMMAND doom-wad-probe-tests)
+    add_executable(doom-flyby-tests tests/flyby.c platform/audio/flyby.c)
+    target_link_libraries(doom-flyby-tests PRIVATE doom_options)
+    target_include_directories(doom-flyby-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/linuxdoom-1.10")
+    if(UNIX)
+        target_link_libraries(doom-flyby-tests PRIVATE m)
+    endif()
+    add_test(NAME near-miss-classification COMMAND doom-flyby-tests)
     add_executable(doom-portability-tests tests/portability.c)
     add_executable(doom-pk3-tests tests/pk3.c)
     target_link_libraries(doom-pk3-tests PRIVATE doom_headless_platform)

@@ -1,0 +1,7 @@
+Wall damage multiplier, 2026-10-19
+F4 > Effects > Doors > Wall damage.
+100% default, selectable to 500% in 50% increments; persisted as wall_damage in graphics.cfg.
+Applies once to new wall/door excavation damage, including wall damage from nearby rocket blasts. Existing crater strength, floor/ceiling damage, weapon damage to actors and breach toggles/limits remain unchanged.
+Test-global/wall-damage.log: one 500% hit matched five 100% hits, changing setting did not alter existing craters, wall direction/actual rocket/body clearance/save-load regression passed.
+Test-bundled/wall-damage-regression.log: live setting mapping at 100/250/500 plus bundled-feature regression passed.
+Packaged DERP-Destruction.exe and updated DiggingEngine.exe. Main production build untouched.

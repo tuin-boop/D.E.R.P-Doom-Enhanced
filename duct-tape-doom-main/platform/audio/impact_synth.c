@@ -7,10 +7,10 @@
 static const char *const names[IMPACT_KINDS] = {
     "spark-crackle", "spark-fizz", "spark-zap", "lamp-dies", "screen-dies",
     "glass-tinkle", "glass-shatter", "glass-break", "glass-big", "glass-fracture", "glass-fracture-big",
-    "step-stone", "step-metal", "step-wood", "step-soft", "splash-water", "splash-thick",
+    "step-stone", "step-metal", "step-wood", "step-soft", "splash-water", "splash-thick", "flyby",
 };
 static const float seconds[IMPACT_KINDS] = { 0.5f, 0.5f, 0.55f, 0.9f, 0.6f, 0.9f, 0.7f, 1.3f, 1.7f, 0.5f, 1.7f,
-                                                0.25f, 0.25f, 0.25f, 0.25f, 0.4f, 0.4f };
+                                                0.25f, 0.25f, 0.25f, 0.25f, 0.4f, 0.4f, 0.3f };
 
 const char *Impact_Name(int kind) { return kind >= 0 && kind < IMPACT_KINDS ? names[kind] : "?"; }
 int Impact_Length(int kind, int rate) { return kind >= 0 && kind < IMPACT_KINDS ? (int)(seconds[kind] * rate) : 0; }
@@ -20,6 +20,7 @@ void Impact_Render(int kind, unsigned seed, int rate, float *out, int frames)
     if (kind <= IMPACT_SCREEN_DIES) Spark_Render(kind, seed, rate, out, frames);
     else if (kind <= IMPACT_GLASS_BIG) Glass_Render(kind, seed, rate, out, frames);
     else if (kind <= IMPACT_GLASS_FRACTURE_BIG) Fracture_Render(kind, seed, rate, out, frames);
+    else if(kind==IMPACT_FLYBY)Flyby_Render(seed,rate,out,frames);
     else Step_Render(kind, seed, rate, out, frames);
 }
 

@@ -44,6 +44,7 @@ rcsid[] = "$Id: p_setup.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
 #include "doomdef.h"
 #include "p_local.h"
+#include "p_digwall.h"
 #include "p_fluid.h"
 
 #include "s_sound.h"
@@ -821,7 +822,7 @@ P_SetupLevel
     char	lumpname[9];
     int		lumpnum;
 	
-    P_FluidReset(); ++r_levelserial;
+    P_FluidReset(); P_GlobalDigReset(); ++r_levelserial;
     totalkills = totalitems = totalsecret = wminfo.maxfrags = 0;
     wminfo.partime = 180;
     for (i=0 ; i<MAXPLAYERS ; i++)

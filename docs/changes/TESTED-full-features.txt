@@ -1,0 +1,19 @@
+2026-10-19 full-feature prototype refresh
+- Packaged DERP-Destruction.exe embeds native engine, all three Fluid packs,
+  launcher hero, and DiggingMaterials.wad. Reflection extraction verified.
+- Packaged native engine completed fullscreen rendercheck at 2560x1440;
+  inspected packaged-hud.png. Normal HUD scale/settings restored.
+- STUCKSERGEANT save copied for tests, originals untouched. Fluid on baseline
+  left two shotgunners at (240,-3376)/(240,-3088); Fluid off moved them.
+  With vertical-overlap fallback, Fluid on moved both out within 70 ticks.
+- 15 monster movement/cadence/cancellation checks passed, as did all eight
+  bundled-mod toggle combinations and sound-bank switching.
+- Global excavation direction, rocket contact, toggle preservation, body fit,
+  solid back wall, save/load and actual player movement checks passed.
+- Full legacy smoke suite stopped at aggressive cadence mode 0 (30 vs 14).
+  That separate assertion is unresolved; focused tests above passed.
+- Removed horizontal excavation caps when adjoining floor/ceiling already
+  supplies that surface, avoiding duplicate coplanar faces. User's exact
+  damaged geometry screenshot was not available as a save to reproduce.
+- Production dist/DuctTapeDoom.exe hash unchanged:
+  B0A5A971AA6DC0E8C601F041260FA077718C814EFF9CD39708684E76F2F655CE

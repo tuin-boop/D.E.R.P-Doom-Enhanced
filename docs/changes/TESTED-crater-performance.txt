@@ -1,0 +1,21 @@
+2026-10-19 crater speckling and impact hitch update
+
+Ready executable: DERP-Destruction.exe; engine and all three bundled mods embedded.
+
+Speckling reproduced on stress-test floor facets. Disabling sector lighting
+removed it. Fixed per-triangle packed normals avoid unstable screen derivatives
+switching floor/wall lighting branches. Verified rendered floor and corner images.
+
+Performance: changed wall revisions and local flat-patch revisions keep unrelated
+meshes cached. Lighting changes no longer rebuild wall geometry. Lattice samples
+are cached; distant cuts skip expensive noise calculations. BSP leaf queries are
+cached between damage revisions. No mesh resolution or damage detail reduction.
+Same fullscreen surface stress test: flat geometry stage 24.871 ms baseline,
+6.537 ms final. These are CPU stage measurements, not whole-game FPS guarantees.
+
+Passed: surface collision/toggle/save/load, near/far monster splash, moving door
+anchors, unrelated floor cache invalidation checks, global excavation wall-face
+and body-clearance tests, bundled native regression through level transition.
+Logs: test-surfaces/final-craters.log, test-global/final-craters.log,
+test-bundled/crater-cache-regression.log.
+Production dist/DuctTapeDoom.exe hash unchanged.

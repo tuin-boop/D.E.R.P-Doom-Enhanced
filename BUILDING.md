@@ -8,7 +8,7 @@ From the repository root, run:
 powershell -ExecutionPolicy Bypass -File launcher/build.ps1
 ```
 
-The resulting launcher is `dist/DuctTapeDoom.exe`. The script embeds the engine, launcher image and the three mod archives. Vendored dependency sources are in `dependencies/`. No commercial IWAD is supplied.
+The resulting launcher is `dist/DERP-Destruction.exe`. The script embeds the engine, launcher image the three mod archives and the crater material WAD. Vendored dependency sources are in `dependencies/`. No commercial IWAD is supplied.
 
 To enable gameplay/GPU checks, configure with your own IWAD:
 

@@ -1,0 +1,9 @@
+Through-wall breaches prototype, 2026-10-19
+F4 > Effects > Doors > Through-wall breaches (experimental), default off.
+Requires Breakable surfaces. Uses accumulated rocket damage, preserving existing save format.
+Current scope: opposing parallel one-sided room walls, up to 64 map units thick. Exterior void, doors, sector height steps and nonparallel exits remain sealed. Floor/ceiling breakthrough is not enabled.
+Apertures apply to both faces, missile/body collision, hitscan, sight and visibility traversal. Ground actors can use normal 24-unit steps between rooms.
+Verified E1M1 line 174, 16-unit wall, exit sector 1: partial hit remains closed, shot aperture bounds, toggle-off ray blocking, sight, hitscan damage, actual rocket crossing, save/load, two-way player passage with differing floor heights.
+Passed default wall excavation, surface and bundled-feature regression suites.
+Logs: test-breaches/breaches.log, test-global/breaches-regression.log, test-surfaces/breaches-regression.log, test-bundled/breaches-regression.log.
+Packaged latest engine with all bundled mods in DERP-Destruction.exe. Main production build untouched.

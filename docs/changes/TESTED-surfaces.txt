@@ -1,0 +1,17 @@
+2026-10-19 surface excavation and AI update
+PASS: E1M1 wall contacts, connected-corner damage, depth/clearance, real
+rockets, player movement and damage save/load (test-global/wrap-check.log).
+PASS: E1M1 and Doom II MAP17 real floor and ceiling rocket impacts, depth
+limits, actor floor/ceiling collision, toggle restoration, save/load and
+wall-boundary thickness queries (test-surfaces/wrap-capture.log,
+test-global-map17/surfaces-map17.log). Floor/ceiling/corner captures produced.
+PASS: full bundled native gameplay suite, including corrected hit-aware
+aggressive-AI cadence, 15 Fluid monster types, advanced tactics, all mod
+switches, sound banks, projectile effects, firing and save/load
+(test-bundled/ai-fixed.log). Previous aggressive assertion was a real miss
+triggering repositioning, not a slow interval after a hit. Tests now measure
+hit and miss cases separately, including sustained fire beyond five hits.
+Successful hits no longer trigger the old every-fifth-hit movement pause.
+Wall depth limits are conservative topology limits, not full room breaches.
+Corner seams remain sealed. Floors cap at 16 units, ceilings at 32.
+Production release executable was not changed.

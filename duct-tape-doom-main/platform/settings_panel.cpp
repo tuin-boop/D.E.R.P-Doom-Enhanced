@@ -10,17 +10,40 @@ extern "C" {
 
 namespace doom3d {
 namespace {
+const char *effectCost(const char *key) {
+    struct Cost {const char *key,*note;};
+    static const Cost costs[]={
+        {"shore_ripples","HIGH COST: many shoreline particles. Off by default."},
+        {"reflections","HIGH GPU COST: renders the reflected scene again."},
+        {"glass_reflections","HIGH GPU COST: another reflected scene when visible."},
+        {"msaa","GPU COST rises with sample count and resolution."},
+        {"scale","GPU COST rises with resolution. 75%/50% are faster."},
+        {"flashlight_shadows","VARIABLE COST: rises with things inside the beam."},
+        {"sun_shadows","LOAD-TIME COST: sunlight is baked, not rebuilt every frame."},
+        {"decoration_shadows","LOAD-TIME COST: changing this re-bakes lighting."},
+        {"wounds","VARIABLE COST: rises with wounded monsters in view."},
+        {"death_falls","VARIABLE COST: rises with simultaneous visible deaths."},
+        {"varied_deaths","VARIABLE COST: rises during large fights."},
+        {"hit_flinch","LOW TYPICAL COST: rises with monsters reacting at once."},
+        {"death_motion","LOW TYPICAL COST: rises with simultaneous deaths."},
+        {"embers","BOUNDED COST: nearby particles only, capped at 384."},
+        {"glow_edges","GPU COST: additional wall shading near glowing liquids."},
+        {"near_miss_sounds","LOW TYPICAL COST: checks enemy bullet paths."},
+    };
+    for(const auto &cost:costs)if(!strcmp(key,cost.key))return cost.note;
+    return nullptr;
+}
 Option check(const char *key,const char *title,int *flag,const char *tip,OptionCondition enabled=nullptr) {
-    Option option{};option.kind=OptionKind::Check;option.key=key;option.title=title;option.tip=tip;option.flag=flag;option.enabled=enabled;return option;
+    Option option{};option.kind=OptionKind::Check;option.key=key;option.title=title;option.cost=effectCost(key);option.tip=tip;option.flag=flag;option.enabled=enabled;return option;
 }
 Option choice(const char *key,const char *title,int *flag,std::vector<const char*> items,std::vector<int> values,const char *tip,
               OptionCondition enabled=nullptr) {
-    Option option{};option.kind=OptionKind::Choice;option.key=key;option.title=title;option.tip=tip;
+    Option option{};option.kind=OptionKind::Choice;option.key=key;option.title=title;option.cost=effectCost(key);option.tip=tip;
     option.flag=flag;option.items=items;option.values=values;option.enabled=enabled;return option;
 }
 Option slider(const char *key,const char *title,float *number,double low,double high,double step,const char *tip,
               OptionCondition enabled=nullptr,std::vector<const char*> labels={}) {
-    Option option{};option.kind=OptionKind::Slider;option.key=key;option.title=title;option.tip=tip;
+    Option option{};option.kind=OptionKind::Slider;option.key=key;option.title=title;option.cost=effectCost(key);option.tip=tip;
     option.number=number;option.low=low;option.high=high;option.step=step;option.enabled=enabled;option.items=labels;
     return option;
 }
@@ -55,6 +78,11 @@ std::vector<OptionTab> optionTabs(Settings &s) {
                 check("palette","Doom palette colors",&s.palette,"Quantize the final lighting and fog to the current WAD palette.")}}}},
         {"Effects",{
             {"Doors",{
+                check("breakable_walls","Breakable surfaces (experimental)",&s.breakableWalls,"Rocket impacts excavate walls, floors and ceilings. Wall depth stops before the next map boundary. Off restores original surfaces and collision; existing damage returns when enabled."),
+                choice("wall_damage","Wall damage",&s.wallDamage,{"100%","150%","200%","250%","300%","350%","400%","450%","500%"},{100,150,200,250,300,350,400,450,500},"Excavation strength per hit against walls and doors. 100% is normal; 500% adds five times as much damage per hit, so breaches take fewer shots. Applies to new damage only. Monster damage and floor/ceiling craters are unchanged.",[](const Settings &d){return d.breakableWalls!=0;}),
+                check("through_walls","Through-wall breaches (experimental)",&s.throughWalls,"Repeated rocket hits can breach walls up to 256 map units thick into another room. Requires Breakable surfaces. Outside-map walls stay sealed. Off restores the backing; damage is retained."),
+                check("deeper_digging","Deeper digging (up to 1024 units)",&s.deeperDig,"Extends the 256-unit wall/door breach limit to 1024 units. Requires Through-wall breaches or Breachable doors plus Breakable surfaces. Only connects to a valid room; outside-map walls stay sealed. Off restores standard limits without erasing damage.",[](const Settings &d){return d.breakableWalls&&(d.throughWalls||d.breachDoors);}),
+                check("breach_doors","Breachable doors (can break maps)",&s.breachDoors,"WARNING: Allows blasting through doors, including locked doors. Can bypass keys, switches and progression and break map scripts. Off by default. Requires Breakable surfaces. Holes move with the door. Independent of Through-wall breaches."),
                 check("door_sparks","Opening door sparks",&s.doorSparks,"Small sparks along the side tracks while a nearby door opens. Cosmetic only.")}},
             {"Combat",{
                 check("gun_impacts","Gun impacts",&s.gunImpacts,"Uzi animated sparks, voxel dust and impact puff from Stewie-Brian Arsenal. Disable to restore original bullet puffs. Blood and shootable lights have separate options."),
@@ -62,6 +90,33 @@ std::vector<OptionTab> optionTabs(Settings &s) {
                     "Hitscan hits leave splats on floors and nearby walls; corpses grow a pool. Colors come from the WAD's blood sprite."),
                 check("blood_shine","Wet blood shine",&s.bloodShine,"Fresh blood on the floor glints in a brighter palette red under dynamic lights, then dries matte.",
                     [](const Settings &d){return d.blood!=0;}),
+                check("wounds","Wound holes",&s.wounds,
+                    "Bullets and pellets leave holes with ragged bloody edges, dark torn rims and short blood smears. "
+                    "The marks follow the monster's animation. Close hits widen a hole; seen from the side it closes. "
+                    "Drawing only: the monster is hit as always."),
+                check("varied_deaths","Varied deaths",&s.deathDirector,
+                    "No two monsters die alike: the death frames keep their order but take new timing each kill (a snap, a "
+                    "hesitation then a drop, a slump), monsters dropped by one blast differ on purpose, and the body settles "
+                    "as it lands. Now and then a hit off the middle turns it, or a hard push steps it back. Drawing only."),
+                choice("death_falls","Procedural falls",&s.deathFalls,{"Off","By the hit","Legs swept","Chest blast","Head shot"},{0,1,2,3,4},
+                    "Monsters standing on two legs fall a way their drawings never show, on joints placed by hand or found in their "
+                    "own art. A weak or low hit buckles the knee on its side and the body goes over, toward its weapon or away; a "
+                    "hard hit snaps the shoulders back and knocks the body down, sooner and farther the harder the hit; a killing "
+                    "shot through the head cuts the strings and the body crumples. Drawing only: damage is the game's own. The "
+                    "fixed choices are for judging each one.",
+                    [](const Settings &d){return d.deathDirector!=0;}),
+                check("death_face_viewer","Dying turn to face you",&s.deathFaceViewer,
+                    "A monster killed facing away turns toward you before its death frames, which are drawn facing the viewer, "
+                    "instead of snapping round.",
+                    [](const Settings &d){return d.deathDirector!=0;}),
+                check("death_motion","Death reactions",&s.deathMotion,
+                    "Dying monsters jolt with the killing blow: thrown back by high hits, legs knocked out by low ones, crumpling "
+                    "under the chainsaw, hopping when gibbed, swaying as fliers fall. Drawn in whole-pixel rows over the game's own "
+                    "death frames, and gone by the corpse frame."),
+                check("hit_flinch","Hit flinches",&s.hitFlinch,"Monsters lean with the push of every hit and spring back. Drawing only: the game sees no difference."),
+                slider("body_motion_strength","Reaction strength",&s.bodyMotionStrength,0.5,3,0.25,
+                    "How far death reactions and hit flinches throw, bend and buckle the body.",
+                    [](const Settings &d){return d.deathMotion!=0||d.hitFlinch!=0;}),
                 check("soft_effects","Soft effect sprites",&s.softSprites,"Explosions, puffs and teleport fog stop slicing into walls and dissolve on a dither at floors."),
                 check("shootable_lights","Shootable lights",&s.shootableLights,
                     "Computer panels and tech walls throw blue sparks when shot. A shot or fireball into the glowing part "
@@ -210,6 +265,7 @@ std::vector<OptionTab> optionTabs(Settings &s) {
                     [](const Settings &d){return d.sun!=0&&d.sunShafts!=0;}),
                 check("sun_disc","Sun in the sky",&s.sunDisc,"A faint sun disc and soft glow where the baked sunlight comes from, over the sky texture's brightest part."),
                 check("dust_motes","Dust motes",&s.dust,"Specks that glint in indoor sunbeams and the flashlight beam."),
+                check("embers","Torch embers",&s.embers,"Small rising sparks from flames, capped and distance limited."),
                 check("heat_haze","Heat haze",&s.heatHaze,"Rows of pixels shimmer above lava, hot damaging floors and flames.")}},
             {"Liquids",{
                 check("reflections","Reflections",&s.reflections,
@@ -240,6 +296,8 @@ std::vector<OptionTab> optionTabs(Settings &s) {
                 check("caustics_shots","Caustics from shots",&s.causticsShots,
                     "Muzzle flashes and projectiles over liquids throw brief ripples on the walls around them, like the flashlight. Subtle next to their direct light.",
                     [](const Settings &d){return d.caustics!=0;}),
+                check("shore_ripples","Shore ripples [High cost]",&s.shoreRipples,"Subtle ripples along liquid banks, distance limited and capped."),
+                check("glow_edges","Glowing liquid edges",&s.glowEdges,"Original slime and lava edge artwork along walls touching the liquid."),
                 check("damp_shores","Damp shores",&s.dampShores,
                     "Walls and banks just above water, nukage, slime and blood turn darker and damp up to a ragged line, "
                     "a little stained by the liquid. Lava stays dry."),
@@ -288,6 +346,7 @@ std::vector<OptionTab> optionTabs(Settings &s) {
                     [](const Settings &d){return d.ambience!=0;},
                     {"25%","50%","75%","100%","125%","150%","175%","200%"})}},
             {"Rooms",{
+                check("near_miss_sounds","Near-miss bullet sounds",&s.nearMissSounds,"Distant enemy bullets whizz when they pass close without hitting you."),
                 check("room_acoustics","Room acoustics",&s.roomAcoustics,
                     "Sounds echo off the walls around you and ring on in a tail measured from the room: corridors slap back, "
                     "big metal halls boom, wooden rooms stay dull and the outdoors almost dry."),
