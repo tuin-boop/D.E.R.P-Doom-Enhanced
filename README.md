@@ -1,4 +1,4 @@
-# D.E.R.P — Doom Enhanced
+# TUIN — Doom Enhanced
 
 A customized Windows build based on **Duct-Tape DOOM**, retaining its renderer and adding native Fluid Weapons/FluidMonsters support, performance improvements, a modern HUD, and gameplay presentation features.
 
