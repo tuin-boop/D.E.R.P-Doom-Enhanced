@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "d_main.h"
 #include "m_argv.h"
 
@@ -16,7 +17,7 @@ int main(int argc, char **argv)
         return 0;
     }
     int demo = M_CheckParm("-playdemo");
-    if (!demo || demo + 1 >= argc || argv[demo + 1][0] == '-')
+    if (!getenv("DERP_CHECK_MAP_SOURCE")&&!M_CheckParm("-loadgame")&&(!demo || demo + 1 >= argc || argv[demo + 1][0] == '-'))
     {
         fputs("A -playdemo <demo> argument is required. Use --help for details.\n", stderr);
         return 1;

@@ -33,7 +33,9 @@ rcsid[] = "$Id: p_mobj.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
 #include "doomdef.h"
 #include "p_local.h"
+#include "p_solid.h"
 #include "p_fluid.h"
+#include "p_digwall.h"
 #include "sounds.h"
 
 #include "st_stuff.h"
@@ -94,6 +96,8 @@ P_SetMobjState
 //
 void P_ExplodeMissile (mobj_t* mo)
 {
+    extern int P_DigImpact(mobj_t*);
+    P_DigImpact(mo);
     if (R_RocketImpact && (mo->flags & MF_MISSILE))
         R_RocketImpact(mo);
     mo->momx = mo->momy = mo->momz = 0;
@@ -298,6 +302,7 @@ void P_ZMovement (mobj_t* mo)
     // clip movement
     if (mo->z <= mo->floorz)
     {
+        if(mo->flags&MF_MISSILE)P_GlobalDigFlatImpact(mo,0);
 	// hit the floor
 
 	// Note (id):
@@ -343,6 +348,7 @@ void P_ZMovement (mobj_t* mo)
 	
     if (mo->z + mo->height > mo->ceilingz)
     {
+        if(mo->flags&MF_MISSILE)P_GlobalDigFlatImpact(mo,1);
 	// hit the ceiling
 	if (mo->momz > 0)
 	    mo->momz = 0;
@@ -430,6 +436,7 @@ P_NightmareRespawn (mobj_t* mobj)
 //
 void P_MobjThinker (mobj_t* mobj)
 {
+    if(SV_Active()){SV_Refresh(mobj);SV_Missile(mobj);}else P_GlobalDigRefreshHeights(mobj);
     P_TacticsTick(mobj);
     P_FluidTick(mobj);
     // momentum movement
@@ -703,6 +710,7 @@ void P_SpawnPlayer (mapthing_t* mthing)
     p->fixedcolormap = 0;
     p->viewheight = VIEWHEIGHT;
 
+    {extern void P_DigSetupPlayer(player_t*);P_DigSetupPlayer(p);SV_Player(p);}
     // setup gun psprite
     P_SetupPsprites (p);
     

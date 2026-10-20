@@ -24,6 +24,7 @@ enum {
     IMPACT_STEP_SOFT,      /* muffled, on grass, dirt and carpet */
     IMPACT_SPLASH_WATER,   /* a step in water */
     IMPACT_SPLASH_THICK,   /* a step in nukage, slime, blood or lava */
+    IMPACT_FLYBY,
     IMPACT_KINDS
 };
 
@@ -39,6 +40,7 @@ void Impact_Hum(int screen, unsigned seed, int rate, float *out, int frames);
 void Impact_To8Bit(const float *in, unsigned char *out, int frames);
 
 /* The pieces, in spark_synth.c, glass_synth.c, fracture_synth.c and step_synth.c. */
+void Flyby_Render(unsigned seed,int rate,float *out,int frames);
 void Spark_Render(int kind, unsigned seed, int rate, float *out, int frames);
 void Glass_Render(int kind, unsigned seed, int rate, float *out, int frames);
 void Fracture_Render(int kind, unsigned seed, int rate, float *out, int frames);

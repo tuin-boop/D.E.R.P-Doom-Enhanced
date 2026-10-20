@@ -1,15 +1,15 @@
-# TUIN — Doom Enhanced
+# Tuin-Doom-Enhanced
 
 A customized Windows build based on **Duct-Tape DOOM**, retaining its renderer and adding native Fluid Weapons/FluidMonsters support, performance improvements, a modern HUD, and gameplay presentation features.
 
-**[Download the latest Windows release](https://github.com/tuin-boop/D.E.R.P-Doom-Enhanced/releases/latest)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
+**[Download the latest Windows release](https://github.com/tuin-boop/Tuin-Doom-Enhanced/releases/latest)** · [Build instructions](BUILDING.md) · [Detailed change notes](docs/changes)
 
 ![Launcher artwork](launcher/hero.png)
 
 ## Getting started
 
-1. Download and extract `DuctTapeDoom-Windows.zip` from Releases.
-2. Run `DuctTapeDoom.exe` and select your own compatible Doom, Doom II, Final Doom, or Freedoom IWAD.
+1. Download `Tuin-Doom-Enhanced.exe` from Releases.
+2. Run `Tuin-Doom-Enhanced.exe` and select your own compatible Doom, Doom II, Final Doom, or Freedoom IWAD.
 3. Add any compatible map WADs, then click **PLAY DOOM**.
 4. Press **F4** for settings and bundled-mod toggles; **F5** opens the cheat/test menu.
 
@@ -17,7 +17,13 @@ The Windows launcher includes the engine and the supplied FluidWeapons, FluidWea
 
 ## Latest update
 
-Optional Persistent pursuit, Aggressive AI and Advanced tactics are now available under **F4 > Monster AI**, with difficulty warnings for the two combat modes. This update also adds lost-soul collision recovery, revised gun/projectile impacts and opening-door sparks. See the [update notes](docs/changes/UPDATE-2026-10-18-2.md) for details and validation.
+The latest release adds shared solid-volume destruction for walls, doors, floors and ceilings, with excavated geometry used for rendering and movement. It retains the enhanced engine features below. Rockets and barrels excavate surfaces; optional projectile and gun damage add smaller chips and debris. Moving damaged doors retain their holes. Destruction settings include breaches, damage strength and deeper digging.
+
+This release includes the latest plasma-impact, homemade-stair and moving-door performance fixes, repaired shallow-crater rims, floating-stain cleanup and restored shootable-glass handling. Small clipped surface fragments have also been corrected.
+
+Earlier releases remain available in [release history](https://github.com/tuin-boop/Tuin-Doom-Enhanced/releases). Save and settings folders retain their previous internal names for compatibility.
+
+Compatible classic/Boom map WADs are supported; arbitrary GZDoom/UDMF maps and general ZScript are not supported. Destruction can bypass keys and map progression. Performance remains dependent on map complexity and accumulated damage.
 
 ## Features added in this version
 
@@ -73,7 +79,7 @@ Optional Persistent pursuit, Aggressive AI and Advanced tactics are now availabl
 - Completion messages for all kills, all secrets, all counted items and overall 100% completion. Empty categories do not independently award messages.
 - Combat notices for surviving a close call, multi-kills, barrel-chain kills, fist kills against tough monsters and a damage-free full completion. Repeatable combat events have cooldowns.
 - First-weapon discovery and completion tracking survive save/load appropriately. Combat notices can be disabled.
-- High-resolution **Toasty** portrait and sound with a 10% cosmetic chance on monster gib deaths; **F5 > TEST TOASTY** previews it. Cosmetic randomness does not consume Doom's gameplay RNG.
+- High-resolution **Toasty** portrait and sound with a 5% cosmetic chance on monster gib deaths; **F5 > TEST TOASTY** previews it. Cosmetic randomness does not consume Doom's gameplay RNG.
 
 ### Performance and diagnostics
 
@@ -98,7 +104,9 @@ Optional Persistent pursuit, Aggressive AI and Advanced tactics are now availabl
 
 ## Validation and limits
 
-The full suite passed **24/24 tests** before the latest interpolation correction; the three relevant weapon/texture suites passed again afterward. Fullscreen switching captures covered all nine weapons at 2560×1440. Historical measurements and their conditions are in [docs/changes](docs/changes).
+For this release, all three shared geometry contract suites pass and the published engine source builds successfully on Windows. Saved-game replays cover plasma impacts, excavated stairs and damaged moving doors. Remaining door-opening stalls are still being investigated; this release does not claim to eliminate every slowdown.
+
+Historical validation: the full suite passed **24/24 tests** before the earlier interpolation correction; the three relevant weapon/texture suites passed again afterward. Fullscreen switching captures covered all nine weapons at 2560×1440. Historical measurements and their conditions are in [docs/changes](docs/changes).
 
 Performance depends on the map, hardware, settings and active effects. This is **not a guaranteed 60-FPS minimum**. The earlier Tech Gone Bad door comparison improved from about 51 FPS average during movement to 93–96 FPS in repeated fullscreen tests on the test PC; those figures are workload-specific, not a universal benchmark.
 

@@ -87,6 +87,7 @@ vec3 lampLight=vec3(0);
 #include "world/surface_light.glsl"
 void main() {
     bool sprite=(vMode&MODE_SPRITE)!=0u;
+    bool wound=sprite&&(vMode&MODE_WOUND)!=0u;
     vec3 dp1=dFdx(vWorld),dp2=dFdy(vWorld);vec2 duv1=dFdx(vUV),duv2=dFdy(vUV);
     float footprint=max(length(duv1),length(duv2));
     // Mip level from the shorter axis, allowing 2:1 stretch along the longer
@@ -101,6 +102,11 @@ void main() {
     // Map surfaces are planar, so screen derivatives give the exact face
     // normal; orient it toward the eye because either side may be drawn.
     vec3 normal=normalize(cross(dp1,dp2));
+    // Crater facets can lie exactly at a floor/wall lighting threshold.
+    // Screen derivatives vary by a few ulps per pixel and made those faces
+    // alternate lighting paths. Use one normal for the entire triangle.
+    if(!sprite&&(vMode&MODE_FACET_NORMAL)!=0u)
+        normal=normalize(vec3(float(vStatic&1023u),float((vStatic>>10u)&1023u),float((vStatic>>20u)&1023u))/511.5-1.0);
     if(dot(normal,c.eye.xyz-vWorld)<0.0) normal=-normal;
     // MODE_BLOOD: blood decals. vTint carries wetness (shine) and how far the
     // color has darkened while drying.
@@ -145,6 +151,11 @@ void main() {
     // Depth comes from the rasterizer, per sample like the shading pass.
     outColor=color;return;
 #endif
+    if(wound) {
+        uint index=(vMode>>MODE_WOUND_PALETTE_SHIFT)&255u;
+        vec3 paint=texelFetch(palette,ivec2(int(index),0),0).rgb;
+        color.rgb=(vMode&MODE_WOUND_STAIN)!=0u?mix(color.rgb,paint,0.7):paint;
+    }
     if(blood) color.rgb*=vTint.g;
     // The thick rim of the glass shades the picture's edges, in light steps.
     if(glassy) color.rgb*=round((1.0-0.5*smoothstep(0.7,1.0,max(abs(screen.x),abs(screen.y))))*16.0)/16.0;
@@ -154,7 +165,10 @@ void main() {
     // Map surfaces carry sector+1 in mode bits 12+; 0 means no sector.
     bool mapped=(vMode>>MODE_SECTOR_SHIFT)>0u&&!sprite&&c.effects.z==0.0;
     uint sector=(vMode>>MODE_SECTOR_SHIFT)-1u;
-    SectorLit lit=sectorLighting(normal,mapped,sector,bakeFlags);
+    // Excavation changes the slope, not the source lightmap. Steep crater
+    // sides must not switch to a wall atlas or wall-floor contact shadow.
+    vec3 bakeNormal=!sprite&&(vMode&MODE_EXCAVATED_FLAT)!=0u?vec3(0,0,normal.z<0.0?-1.0:1.0):normal;
+    SectorLit lit=sectorLighting(bakeNormal,mapped,sector,bakeFlags);
     float light=lit.light;
     // Grounding: things resting on the floor darken over their lowest 24
     // units in colormap-like 1/16 steps; vSun holds strength and height.
@@ -202,10 +216,17 @@ void main() {
             specular+=vec3(round(edge*saturate(dot(illumination,vec3(0.299,0.587,0.114)))*0.45*16.0)/16.0);
         }
     }
-    float emission=0.0;
+    // FEATURE_GLOW_EDGES: walls at a glowing liquid's edge take its painted
+    // strip (edgeStrip in world/shore.glsl), glowing where the strip does.
+    float edgeGlow=0.0;
+    if(mapped&&(bakeFlags&FEATURE_GLOW_EDGES)!=0u&&abs(normal.z)<=0.5) {
+        vec3 paint;float amount=edgeStrip(vWorld,normal,paint,edgeGlow);
+        color.rgb=mix(color.rgb,paint,amount);
+    }
+    float emission=edgeGlow;
     // MODE_GLOWING_EYES: a monster's painted eyes shine a little past full
     // brightness whatever light falls on it.
-    if(sprite&&(vMode&MODE_GLOWING_EYES)!=0u&&c.effects.z==0.0) {
+    if(sprite&&!wound&&(vMode&MODE_GLOWING_EYES)!=0u&&c.effects.z==0.0) {
         emission=eyeGlow(image,uv);
         illumination=max(illumination,vec3(emission*1.2));
     }
@@ -222,6 +243,7 @@ void main() {
             if(!glassy) color.rgb=mix(color.rgb,vec3(dot(color.rgb,vec3(0.299,0.587,0.114))*0.15),emission);
             emission=0.0;
         }
+        emission=max(emission,edgeGlow);
         illumination=max(illumination,vec3(emission));
     }
     // FEATURE_DAMP_SHORES: damp walls and banks above liquids (shoreWet), darker and
@@ -288,7 +310,7 @@ void main() {
     // ceiling, and their depth is pulled toward the eye by vSun.x so walls
     // they stand against no longer slice the billboard.
     float depth=gl_FragCoord.z;
-    if((vMode&MODE_SOFT)!=0u) {
+    if((vMode&MODE_SOFT)!=0u&&!wound) {
         vec4 info=sectorInfo[(vMode>>MODE_SECTOR_SHIFT)-1u];
         float room=min(vWorld.z-info.y,info.w>0.0?1e4:info.z-vWorld.z);
         if(saturate(room/12.0)<bayer4(ivec2(floor(gl_FragCoord.xy/max(c.fx2.x,1.0))))) discard;

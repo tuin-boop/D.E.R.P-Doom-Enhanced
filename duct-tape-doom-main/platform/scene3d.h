@@ -57,6 +57,8 @@ static_assert(sizeof(Flash)==64&&sizeof(FlashSet)==4048&&sizeof(LightBlocker)==3
 struct FogLights { unsigned count=0,indices[4]={},padding[3]={}; };
 static_assert(sizeof(FogLights)==32,"Fog shader layout");
 struct Settings {
+    int hitFlinch=1,deathMotion=1,deathDirector=1,deathFalls=1,deathFaceViewer=0,wounds=1,embers=1,shoreRipples=0,glowEdges=1,nearMissSounds=1;
+    float bodyMotionStrength=1;
     int fullscreen=0;
     int hudStyle=0,hudFace=1,hudLayout=0;
     float hudScale=100;
@@ -121,6 +123,13 @@ struct Settings {
     int glowingEyes=1; // The eyes painted into monster artwork glow in the dark, with bloom (sprite_eyes.h).
     int windowGlass=1; // Windows found in the map get glass that reflects and shatters when shot through.
     int gunImpacts=1;
+    int breakableWalls=1;
+    int throughWalls=0;
+    int breachDoors=0;
+    int wallDamage=100;
+    int deeperDig=0;
+    int monsterSurfaceDamage=1;
+    int playerSurfaceDamage=1;
     int doorSparks=1; // Cosmetic sparks along opening door tracks.
     int shootableLights=1; // Experiment: tech walls spark when shot; shots into a lamp or screen break its fixture and re-bake its light.
     int killShotsCarry=1; // With shootableLights: a hitscan shot that kills its target carries on to spark and break lights behind it.

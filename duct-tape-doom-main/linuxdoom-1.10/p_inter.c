@@ -824,6 +824,8 @@ P_DamageMobj
     if ( !(target->flags & MF_SHOOTABLE) )
 	return;	// shouldn't happen...
 		
+    if(R_DamageHit)R_DamageHit(target,inflictor,source,damage);
+
     if (target->health <= 0)
 	return;
 
@@ -910,7 +912,7 @@ P_DamageMobj
 	if (player->health < 0)
 	    player->health = 0;
 	
-	P_NoticeDamage(player,damage);
+	P_NoticeDamage(player,damage,source);
 	player->attacker = source;
 	player->damagecount += damage;	// add damage after armor / invuln
 

@@ -7,11 +7,13 @@
 #define MODE_SPRITE          2u    // a sprite: clamped texels, drawn after the opaque world
 #define MODE_SUNBEAM         2u    // mist pass only: a sunbeam ribbon, not a mist layer
 #define MODE_FUZZ            4u    // spectre (MF_SHADOW): darkened and translucent
+#define MODE_FACET_NORMAL    8u    // non-sprite: packed constant triangle normal in statics
 #define MODE_RELIT           8u    // per-pixel light from the silhouette normals
 #define MODE_FLIPPED         16u   // mirrored sprite frame: flip the normals too
 #define MODE_LIQUID          16u   // non-sprite floors only: distance-stable liquid detail
 #define MODE_MIRROR_FLOOR    32u   // a liquid floor sampling the reflection pass
 #define MODE_PICKUP          64u   // pickups: a soft pulse and some bloom
+#define MODE_EXCAVATED_FLAT  128u  // non-sprite: crater retains its parent floor/ceiling bake
 #define MODE_GROUNDED        128u  // darkened feet of things resting on the floor
 #define MODE_BLOOD           256u  // blood decal; vTint carries wetness and drying
 #define MODE_HARD_SILHOUETTE 512u  // shadow pass: keep the sprite's pixel outline
@@ -24,4 +26,7 @@
 // Bits from here up carry sector+1 for map-space lighting; 0 means none.
 #define MODE_SECTOR_SHIFT    15
 
+#define MODE_WOUND 8192u
+#define MODE_WOUND_PALETTE_SHIFT 14
+#define MODE_WOUND_STAIN (1u<<22)
 #endif

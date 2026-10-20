@@ -13,7 +13,16 @@
 
 void I_InitGraphics(void) { }
 void I_ShutdownGraphics(void) { }
-void I_StartFrame(void) { }
+void I_StartFrame(void) {
+    if(gamestate==GS_LEVEL&&players[0].mo){
+        if(getenv("DERP_CHECK_MAP_SOURCE")){
+            extern int SV_CheckMapSource(void);
+            exit(SV_CheckMapSource()?0:1);
+        }
+        const char *path=getenv("DERP_EXPORT_VOLUME");
+        if(path){extern void P_ExportSolidFixture(const char*);P_ExportSolidFixture(path);exit(0);}
+    }
+}
 void I_StartTic(void) { }
 void I_UpdateNoBlit(void) { }
 void I_FinishUpdate(void) { }

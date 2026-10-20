@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -13,7 +13,7 @@ using System.Windows.Forms;
 using System.Xml.Linq;
 
 internal static class Data {
-    internal static readonly string Home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DuctTapeDoomLauncher");
+    internal static readonly string Home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DERPSolidMapsLauncher");
     internal static string Quote(string s) {
         var b=new StringBuilder("\"");int slashes=0;
         foreach(char c in s) {
@@ -75,7 +75,7 @@ internal static class Data {
                 if(WadHas(f,"E5M1")&&!WadHas(game,"E4M1"))throw new IOException("SIGIL requires the Ultimate Doom IWAD (DOOM.WAD). Select that IWAD, then keep SIGIL in the add-on list.");
                 classic.Add(f);}
         }
-        string args="-uzmovement -iwad "+Quote(game);
+        string args="-solidmaps -uzmovement -iwad "+Quote(game);
         if(monsters)args+=" -fluidmonsters";
         if(classic.Count>0)args+=" -file "+String.Join(" ",classic.Select(Quote));
         if(fluid!=null)args+=" -fluidweapons "+Quote(fluid)+" -modsounds "+String.Join(" ",sounds.Select(Quote))+" -fluid-sounds -weaponinterpolation";
@@ -119,6 +119,7 @@ internal static class Data {
         bool valid=false;
         if(File.Exists(path)) using(var sha=SHA256.Create()) using(var f=File.OpenRead(path)) valid=BitConverter.ToString(sha.ComputeHash(f)).Replace("-","")==hash;
         if(!valid) File.WriteAllBytes(path,bytes);
+        File.Copy(BundledResource("DiggingMaterials.wad"),Path.Combine(dir,"DiggingMaterials.wad"),true);
         return path;
     }
     internal static List<string> Scan(IEnumerable<string> roots) {
@@ -150,9 +151,9 @@ internal sealed class Hero : Panel {
         base.OnPaint(e); var g=e.Graphics;
         if(art!=null)g.DrawImage(art,new Rectangle(320,0,420,274));
         using(var fade=new System.Drawing.Drawing2D.LinearGradientBrush(ClientRectangle,Color.FromArgb(255,13,19,17),Color.FromArgb(25,13,19,17),0f))g.FillRectangle(fade,ClientRectangle);
-        using(var title=new Font("Segoe UI",25,FontStyle.Bold))g.DrawString("DUCT TAPE DOOM",title,Brushes.White,20,38);
+        using(var title=new Font("Segoe UI",23,FontStyle.Bold))g.DrawString("TUIN DOOM ENHANCED",title,Brushes.White,20,38);
         using(var small=new Font("Segoe UI",10,FontStyle.Bold))
-        using(var accent=new SolidBrush(Color.FromArgb(153,219,109)))g.DrawString("CLASSIC DOOM. NEW ATMOSPHERE.",small,accent,23,92);
+        using(var accent=new SolidBrush(Color.FromArgb(153,219,109)))g.DrawString("SOLID GEOMETRY - DESTRUCTION BUILD",small,accent,23,92);
         using(var pen=new Pen(Color.FromArgb(106,157,75),2))g.DrawLine(pen,20,Height-2,Width-20,Height-2);
     }
     protected override void Dispose(bool disposing) {if(disposing&&art!=null){art.Dispose();art=null;}base.Dispose(disposing);}
@@ -162,7 +163,7 @@ internal sealed class Launcher : Form {
     string settings=Path.Combine(Data.Home,"launcher.xml"); bool scanning;
     [STAThread] static void Main() {
         Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
-        Application.ThreadException+=(s,e)=>MessageBox.Show(e.Exception.Message,"Duct Tape Doom");
+        Application.ThreadException+=(s,e)=>MessageBox.Show(e.Exception.Message,"Tuin-Doom-Enhanced");
         Application.Run(new Launcher());
     }
     Button Button(string text, int x, int y, int width, Action action) {
@@ -170,19 +171,19 @@ internal sealed class Launcher : Form {
     }
     void Label(string text,int x,int y,int width,int height) { Controls.Add(new Label { Text=text,Left=x,Top=y,Width=width,Height=height }); }
     public Launcher() {
-        Text="Duct Tape Doom"; ClientSize=new Size(740,610); FormBorderStyle=FormBorderStyle.FixedSingle; MaximizeBox=false;
+        Text="Tuin-Doom-Enhanced"; ClientSize=new Size(740,610); FormBorderStyle=FormBorderStyle.FixedSingle; MaximizeBox=false;
         StartPosition=FormStartPosition.CenterScreen; Font=new Font("Segoe UI",10); BackColor=Color.FromArgb(19,25,23); ForeColor=Color.FromArgb(219,228,220);
 
         Label("Base game (IWAD)",20,55,500,25);
         games.SetBounds(20,83,580,30); games.DropDownStyle=ComboBoxStyle.DropDownList; games.DropDownWidth=1000; Controls.Add(games);
-        Button("Browse…",610,81,108,BrowseGame);
+        Button("Browse...",610,81,108,BrowseGame);
         scan=Button("Scan for IWADs",20,123,155,()=>Scan(null));
-        Button("Scan folder…",185,123,140,()=>{using(var d=new FolderBrowserDialog()) { d.Description="Scan this folder and its subfolders for Doom IWADs"; if(d.ShowDialog()==DialogResult.OK) Scan(new[]{d.SelectedPath}); }});
-        Label("Add-ons — loaded from top to bottom (later files override earlier files)",20,173,700,25);
+        Button("Scan folder...",185,123,140,()=>{using(var d=new FolderBrowserDialog()) { d.Description="Scan this folder and its subfolders for Doom IWADs"; if(d.ShowDialog()==DialogResult.OK) Scan(new[]{d.SelectedPath}); }});
+        Label("Add-ons - loaded from top to bottom (later files override earlier files)",20,173,700,25);
         mods.SetBounds(20,204,580,149); mods.HorizontalScrollbar=true; mods.AllowDrop=true; Controls.Add(mods);
         mods.DragEnter+=(s,e)=>{ if(e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect=DragDropEffects.Copy; };
         mods.DragDrop+=(s,e)=>Add((string[])e.Data.GetData(DataFormats.FileDrop));
-        Button("Add files…",610,204,108,()=>{using(var d=new OpenFileDialog { Filter="Doom add-ons (*.wad;*.pk3)|*.wad;*.pk3",Multiselect=true }) if(d.ShowDialog()==DialogResult.OK) Add(d.FileNames);});
+        Button("Add files...",610,204,108,()=>{using(var d=new OpenFileDialog { Filter="Doom add-ons (*.wad;*.pk3)|*.wad;*.pk3",Multiselect=true }) if(d.ShowDialog()==DialogResult.OK) Add(d.FileNames);});
         Button("Remove",610,243,108,()=>{int i=mods.SelectedIndex;if(i>=0)mods.Items.RemoveAt(i);});
         Button("Move up",610,282,108,()=>MoveMod(-1)); Button("Move down",610,321,108,()=>MoveMod(1));
         Label("Other PK3s: classic resources and WAD maps. General ZScript is not supported.",20,363,700,45);
@@ -202,7 +203,7 @@ internal sealed class Launcher : Form {
     void BrowseGame() { using(var d=new OpenFileDialog { Filter="Doom IWAD (*.wad)|*.wad" }) if(d.ShowDialog()==DialogResult.OK) { if(!Data.Iwad(d.FileName)) { MessageBox.Show("Choose a valid Doom / Doom II / Final Doom / Freedoom IWAD."); return; } AddGame(d.FileName); games.SelectedItem=d.FileName; } }
     void AddGame(string p) { if(!games.Items.Cast<string>().Contains(p,StringComparer.OrdinalIgnoreCase))games.Items.Add(p); if(games.SelectedIndex<0)games.SelectedIndex=0; }
     async void Scan(string[] roots) {
-        if(scanning)return; scanning=true;scan.Enabled=false;status.Text="Scanning for IWADs…";
+        if(scanning)return; scanning=true;scan.Enabled=false;status.Text="Scanning for IWADs...";
         try {
             if(roots==null) {
                 var list=new List<string> { AppDomain.CurrentDomain.BaseDirectory,Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Downloads"),@"C:\GZDoom",@"C:\Games",@"C:\GOG Games" };
@@ -244,7 +245,12 @@ internal sealed class Launcher : Form {
             if(mods.Items.Count>18)throw new IOException("Choose at most 18 add-ons.");
             var files=mods.Items.Cast<string>().ToArray();
             string args=await Task.Run(()=>Data.BundledArguments(game,files));
-            Save();status.Text="Starting Duct Tape Doom…";
+            string profile=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Local Games","DERP Solid Maps");
+            Directory.CreateDirectory(profile);
+            string graphics=Path.Combine(profile,"graphics.cfg");
+            if(!File.Exists(graphics))File.Copy(Data.BundledResource("graphics.cfg"),graphics);
+            args+=" -graphics "+Data.Quote(graphics);
+            Save();status.Text="Starting Tuin-Doom-Enhanced...";
             string engine=await Task.Run(()=>Data.Engine());
             var start=new ProcessStartInfo(engine,args) { WorkingDirectory=Data.Home,UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true };
             using(var p=Process.Start(start)) {

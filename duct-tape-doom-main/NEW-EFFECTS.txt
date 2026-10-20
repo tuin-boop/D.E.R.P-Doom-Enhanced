@@ -1,0 +1,33 @@
+Selected upstream effects — 19 October 2026
+
+Integrated from the supplied derp-main.zip, retaining the local renderer,
+lighting workers, FluidWeapons integration and AI improvements.
+
+F5 > Effects > Combat:
+- Hit flinches and adjustable reaction strength.
+- Death reactions, varied deaths and procedural falls.
+- Wound holes attached to the monster artwork as animation frames change.
+These are presentation effects; they do not change monster hitboxes or damage.
+
+F5 > Atmosphere:
+- Torch embers: capped at 384 nearby particles.
+- Shore ripples: capped at 2048 blocks and limited to nearby liquid edges.
+- Glowing liquid edges using the existing liquid artwork.
+
+F5 > Sound:
+- Near-miss bullet sounds for distant enemy shots passing close to the player.
+
+Each effect can be turned off individually. New glass was deliberately deferred.
+
+Validation: 27 test cases passed, including real-WAD GPU gameplay/save-load,
+weapon interpolation, wound attachment and placement, near-miss classification,
+and shader compilation. Fullscreen visual captures checked at 2560x1440.
+A short E1M1 realtime plasma run with effects enabled averaged 134.7 FPS,
+p99 13.13 ms, maximum 39.84 ms; 7 frames exceeded 16.67 ms.
+This is a limited smoke measurement, not a guarantee for complex maps.
+
+Shore ripples are OFF by default, with [High cost] in the menu.
+Selected effects now show approximate performance notes. Costs depend on
+hardware and map complexity; baked-light options distinguish loading cost
+from per-frame cost. The same short run with only shore ripples disabled
+averaged 234.5 FPS (p99 10.35 ms).

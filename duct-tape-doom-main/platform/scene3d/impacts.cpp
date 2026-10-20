@@ -1,6 +1,9 @@
 /* Bullet impacts and explosions: wall and floor decals, scorches and
    debris. */
 #include "internal.h"
+#include "p_digwall.h"
+#include "../../../map_world.h"
+extern const lab::MapWorld *SV_MapWorld();
 
 namespace doom3d {
 // Hitscan wall impacts leave fading bullet marks and a short burst of debris
@@ -147,6 +150,26 @@ void doorDamage(line_t *line,int side,fixed_t fx,fixed_t fy,fixed_t fz,int broke
         float sz=broken?randomRange(span.bottom,span.top):z;
         debris.push_back({sx,sy,sz,nx*out+dx/len*slide,ny*out+dy/len*slide,randomRange(40,160),now,
             broken?1.2f:.4f,broken?randomRange(1.5f,3.f):1.f,color,broken?lighting(sides[line->sidenum[side]].sector):1.f});
+    }
+}
+void surfaceChip(float x,float y,float z,float nx,float ny,float nz){
+    dropOldLevelImpacts();
+    float now=leveltime/(float)TICRATE;
+    const sector_t *room=R_PointInSubsector(fixed_t(x*FRACUNIT),fixed_t(y*FRACUNIT))->sector;
+    for(int i=0;i<3&&debris.size()<512;++i){
+        float shade=randomRange(.35f,.6f),speed=randomRange(28,55);
+        debris.push_back({x,y,z,nx*speed+randomRange(-10,10),ny*speed+randomRange(-10,10),nz*speed+randomRange(12,28),now,
+            .65f,randomRange(.4f,1.f),{shade,shade,shade},lighting(room)});
+    }
+}
+void craterCrumble(float x,float y,float z){
+    dropOldLevelImpacts();
+    float now=leveltime/(float)TICRATE;
+    const sector_t *room=R_PointInSubsector(fixed_t(x*FRACUNIT),fixed_t(y*FRACUNIT))->sector;
+    for(int i=0;i<3&&debris.size()<512;++i){
+        float shade=randomRange(.35f,.6f);
+        debris.push_back({x,y,z,randomRange(-18,18),randomRange(-18,18),randomRange(-25,5),now,
+            1.3f,randomRange(1.5f,3.f),{shade,shade,shade},lighting(room)});
     }
 }
 void barrelBlast(const mobj_t &thing,float x,float y,float z) {

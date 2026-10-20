@@ -75,7 +75,7 @@ static void P_AggressiveShotEnd(mobj_t *actor){
     if(!P_AggressiveEnabled())return;
     aggressive_t *data=P_AggressiveData(actor);
     if(!data->hit)P_AggressiveMiss(actor);
-    else if(++data->shots%5==0){data->side=-data->side;data->moveUntil=-7;}
+    // Successful hits keep the firing lane; reposition only after a miss.
 }
 void P_AggressiveMissile(mobj_t *missile,mobj_t *source){
     if(!P_AggressiveEnabled()||!(source->flags&MF_COUNTKILL))return;
@@ -87,7 +87,7 @@ void P_AggressiveImpact(mobj_t *missile){
     aggressive_shot_t *shot=&aggressiveShots[((uintptr_t)missile>>4)%1024];
     if(shot->missile!=missile)return;
     if(!shot->hit)P_AggressiveMiss(shot->source);
-    else if(shot->source&&shot->source->health>0){aggressive_t *data=P_AggressiveData(shot->source);if(leveltime>=data->barrageUntil&&++data->shots%5==0){data->side=-data->side;data->moveUntil=-7;}}
+
     shot->missile=NULL;
 }
 void P_AggressiveRemove(mobj_t *actor){

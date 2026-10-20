@@ -28,6 +28,7 @@ rcsid[] = "$Id: p_tick.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
 #include "z_zone.h"
 #include "p_local.h"
+#include "p_solid.h"
 
 #include "doomstat.h"
 
@@ -150,6 +151,7 @@ void P_Ticker (void)
 	if (playeringame[i])
 	    P_PlayerThink (&players[i]);
 			
+    SV_Tick();
     P_RunThinkers ();
     P_UpdateSpecials ();
     P_RespawnSpecials ();

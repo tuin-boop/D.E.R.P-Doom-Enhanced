@@ -35,6 +35,8 @@ rcsid[] = "$Id: p_map.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 
 #include "doomdef.h"
 #include "p_local.h"
+#include "p_solid.h"
+#include "p_digwall.h"
 
 #include "s_sound.h"
 
@@ -214,7 +216,21 @@ boolean PIT_CheckLine (line_t* ld)
 
     if (P_BoxOnLineSide (tmbbox, ld) != -1)
 	return true;
+    if(SV_MapPosition(tmthing,tmx,tmy)){
+        // Preserve deliberate invisible barriers and monster-only fences.
+        // Physical solid walls are tested against the edited volume.
+        if(!(tmthing->flags&MF_MISSILE)&&ld->backsector){
+            if((ld->flags&ML_BLOCKMONSTERS)&&!tmthing->player)return false;
+            if((ld->flags&ML_BLOCKING)&&
+               ld->frontsector->floorheight==ld->backsector->floorheight&&
+               ld->frontsector->ceilingheight==ld->backsector->ceilingheight)return false;
+        }
+        goto solid_special;
+    }
 		
+    if(P_GlobalDigEnabled()){
+        for(int side=0;side<2;++side)if(ld->sidenum[side]>=0&&(P_GlobalDigFit((int)(ld-lines),side,tmthing,tmx,tmy)||P_GlobalDigRetreat((int)(ld-lines),side,tmthing,tmx,tmy)))return true;
+    }
     // A line has been hit
     
     // The moving thing's destination position will cross
@@ -254,6 +270,7 @@ boolean PIT_CheckLine (line_t* ld)
     if (lowfloor < tmdropoffz)
 	tmdropoffz = lowfloor;
 		
+solid_special:
     // if contacted a special line, add it to the list
     if (ld->special)
     {
@@ -346,6 +363,8 @@ boolean PIT_CheckThing (mobj_t* thing)
 	    return !(thing->flags & MF_SOLID);	
 	}
 	
+	// Record the actual actor impact for nearby surface blast damage.
+        P_GlobalDigMonsterContact(tmthing,tmx,tmy);
 	// damage / explode
 	damage = ((P_Random()%8)+1)*tmthing->info->damage;
 	P_DamageMobj (thing, tmthing, tmthing->target, damage);
@@ -454,6 +473,27 @@ P_CheckPosition
     if ( tmflags & MF_NOCLIP )
 	return true;
     
+    if(SV_Active()){
+        if(!SV_Position(thing,x,y,&tmfloorz,&tmceilingz))return false;
+        tmdropoffz=tmfloorz;
+    }else{
+    if(P_GlobalDigBreachSupportRoom((int)(newsubsec->sector-sectors))>=0){
+        float floor=tmfloorz/(float)FRACUNIT,ceiling=tmceilingz/(float)FRACUNIT;
+        P_GlobalDigBreachRoomBounds((int)(newsubsec->sector-sectors),&floor,&ceiling);
+        tmfloorz=tmdropoffz=(fixed_t)(floor*FRACUNIT);tmceilingz=(fixed_t)(ceiling*FRACUNIT);
+    }
+    {int owner=-1;
+        if(!P_GlobalDigPosition(thing,x,y,&owner))return false;
+        if(owner>=0){
+            float floor=sectors[owner].floorheight/(float)FRACUNIT,ceiling=sectors[owner].ceilingheight/(float)FRACUNIT;
+            P_GlobalDigBreachRoomBounds(owner,&floor,&ceiling);
+            tmfloorz=tmdropoffz=(fixed_t)(floor*FRACUNIT);tmceilingz=(fixed_t)(ceiling*FRACUNIT);
+        }
+    }
+    P_GlobalDigFlatHeights(thing,x,y,(int)(newsubsec->sector-sectors),&tmfloorz,&tmceilingz);
+    tmfloorz=P_GlobalDigBreachStepFloor(thing,x,y,tmfloorz);
+    tmdropoffz=tmfloorz;
+    }
     // Check things first, possibly picking things up.
     // The bounding box is extended by MAXRADIUS
     // because mobj_ts are grouped into mapblocks
@@ -606,6 +646,10 @@ boolean P_ThingHeightClip (mobj_t* thing)
     boolean		onfloor;
 	
     onfloor = (thing->z == thing->floorz);
+    if(SV_MapPosition(thing,thing->x,thing->y)){
+        fixed_t floor,ceiling;
+        if(SV_Position(thing,thing->x,thing->y,&floor,&ceiling)==0)return false;
+    }
 	
     P_CheckPosition (thing, thing->x, thing->y);	
     // what about stranding a monster partially off an edge?
@@ -768,6 +812,7 @@ boolean PTR_SlideTraverse (intercept_t* in)
 //
 void P_SlideMove (mobj_t* mo)
 {
+    if(SV_Slide(mo))return;
     fixed_t		leadx;
     fixed_t		leady;
     fixed_t		trailx;
@@ -899,7 +944,12 @@ PTR_AimTraverse (intercept_t* in)
     if (in->isaline)
     {
 	li = in->d.line;
-	
+        if(P_GlobalDigBreachRay((int)(li-lines),
+            (trace.x+FixedMul(trace.dx,in->frac))/(float)FRACUNIT,
+            (trace.y+FixedMul(trace.dy,in->frac))/(float)FRACUNIT,shootz/(float)FRACUNIT,
+            trace.dx/(float)FRACUNIT,trace.dy/(float)FRACUNIT,0)){
+            bottomslope=0;topslope=1;return true;
+        }
 	if ( !(li->flags & ML_TWOSIDED) )
 	    return false;		// stop
 	
@@ -974,11 +1024,15 @@ PTR_AimTraverse (intercept_t* in)
 // already left la_sector, the sector it is passing through, vertically.
 // Returns false when it did.
 //
+void (*P_ShotTraced)(mobj_t *shooter,mobj_t *hit,fixed_t x1,fixed_t y1,fixed_t z1,fixed_t x2,fixed_t y2,fixed_t z2);
+static fixed_t la_endfrac;
+static mobj_t *la_hit;
 boolean		la_freeaim;
 static sector_t* la_sector;
 
 static boolean PTR_ShootPlane (fixed_t frac)
 {
+    if(SV_Active())return true; // The shared mesh already bounds this shot.
     fixed_t	z = shootz + FixedMul (aimslope, FixedMul (frac, attackrange));
     fixed_t	plane;
     fixed_t	dist;
@@ -1002,10 +1056,12 @@ static boolean PTR_ShootPlane (fixed_t frac)
 	dist = 0;
     if (dist < FixedMul (frac, attackrange))
 	frac = FixedDiv (dist, attackrange);
+    la_endfrac=frac;
     x = trace.x + FixedMul (trace.dx, frac);
     y = trace.y + FixedMul (trace.dy, frac);
     z = ceiling ? plane - 4*FRACUNIT : plane;
 
+    if(la_damage>0)P_GlobalDigBulletFlat(shootthing,(int)(la_sector-sectors),ceiling,x,y);
     if (!R_PlaneImpact || !R_PlaneImpact (la_sector, ceiling, x, y, z))
 	P_SpawnPuff (x, y, z);
     return false;
@@ -1015,6 +1071,9 @@ static boolean PTR_ShootPlane (fixed_t frac)
 //
 // PTR_ShootTraverse
 //
+static fixed_t solidFraction;
+static float solidPoint[6];
+static int solidOwner;
 boolean PTR_ShootTraverse (intercept_t* in)
 {
     fixed_t		x;
@@ -1031,15 +1090,49 @@ boolean PTR_ShootTraverse (intercept_t* in)
     fixed_t		thingtopslope;
     fixed_t		thingbottomslope;
 		
+    if(SV_Active()&&in->frac>=solidFraction&&solidFraction<FRACUNIT){
+        if(SV_MapMode()&&in->isaline&&R_WallImpact&&
+           FixedMul(in->frac-solidFraction,attackrange)<=2*FRACUNIT)
+            R_WallImpact(in->d.line,P_PointOnLineSide(trace.x,trace.y,in->d.line),
+                trace.x+FixedMul(trace.dx,in->frac),
+                trace.y+FixedMul(trace.dy,in->frac),
+                shootz+FixedMul(aimslope,FixedMul(attackrange,in->frac)));
+        if(SV_MapMode()&&in->isaline&&in->d.line->special&&
+           FixedMul(in->frac-solidFraction,attackrange)<=2*FRACUNIT)
+            P_ShootSpecialLine(shootthing,in->d.line);
+        la_endfrac=solidFraction;return false;
+    }
     if (la_freeaim && !PTR_ShootPlane (in->frac))
 	return false;
 
+    la_endfrac=in->frac;
     if (in->isaline)
     {
 	li = in->d.line;
 	
 	if (li->special)
 	    P_ShootSpecialLine (shootthing, li);
+        if(SV_MapMode()){
+            // Glass is a gameplay effect on an open portal, not part of the
+            // solid volume. Keep the original crossing callback.
+            if(R_ShotPassed)R_ShotPassed(li,
+                trace.x+FixedMul(trace.dx,in->frac),
+                trace.y+FixedMul(trace.dy,in->frac),
+                shootz+FixedMul(aimslope,FixedMul(attackrange,in->frac)),
+                trace.dx,trace.dy);
+            return true;
+        }
+        dist=FixedMul(attackrange,in->frac);
+        if(P_GlobalDigBreachRay((int)(li-lines),
+            (trace.x+FixedMul(trace.dx,in->frac))/(float)FRACUNIT,
+            (trace.y+FixedMul(trace.dy,in->frac))/(float)FRACUNIT,
+            (shootz+FixedMul(aimslope,dist))/(float)FRACUNIT,
+            trace.dx/(float)FRACUNIT,trace.dy/(float)FRACUNIT,
+            FixedMul(aimslope,attackrange)/(float)FRACUNIT)){
+            if(la_freeaim){int room=P_GlobalDigBreachSector((int)(li-lines),0,0,trace.dx/(float)FRACUNIT,trace.dy/(float)FRACUNIT);if(room>=0)la_sector=&sectors[room];}
+            return true;
+        }
+
 
 	if ( !(li->flags & ML_TWOSIDED) )
 	    goto hitline;
@@ -1093,6 +1186,9 @@ boolean PTR_ShootTraverse (intercept_t* in)
 		return false;		
 	}
 
+        if(la_damage>0)P_GlobalDigBulletWall(shootthing,(int)(li-lines),P_PointOnLineSide(trace.x,trace.y,li),
+            trace.x+FixedMul(trace.dx,in->frac),trace.y+FixedMul(trace.dy,in->frac),
+            shootz+FixedMul(aimslope,FixedMul(in->frac,attackrange)));
 	// Spawn bullet puffs.
 	P_SpawnPuff (x,y,z);
 	if (R_WallImpact)
@@ -1139,9 +1235,10 @@ boolean PTR_ShootTraverse (intercept_t* in)
     {
 	P_SpawnBlood (x,y,z, la_damage);
 	if (R_BloodHit)
-	    R_BloodHit (th, x, y, z, trace.dx, trace.dy, la_damage);
+	    R_BloodHit (th, x, y, z, trace.dx, trace.dy, la_damage, aimslope, shootthing);
     }
 
+    la_hit=th;
     if (la_damage)
 	P_DamageMobj (th, shootthing, shootthing, la_damage);
 
@@ -1220,13 +1317,24 @@ P_LineAttack
 	la_sector = t1->subsector->sector;
     }
 		
+    solidFraction=FRACUNIT;
+    if(SV_Active())solidFraction=(fixed_t)(FRACUNIT*SV_Trace(t1->x/(float)FRACUNIT,t1->y/(float)FRACUNIT,shootz/(float)FRACUNIT,
+        (x2-t1->x)/(float)FRACUNIT,(y2-t1->y)/(float)FRACUNIT,FixedMul(slope,distance)/(float)FRACUNIT,solidPoint,&solidOwner));
+    la_hit=NULL;la_endfrac=FRACUNIT;
     if (P_PathTraverse ( t1->x, t1->y,
 			 x2, y2,
 			 PT_ADDLINES|PT_ADDTHINGS,
-			 PTR_ShootTraverse )
-	&& la_freeaim)
-	PTR_ShootPlane (FRACUNIT);
+			 PTR_ShootTraverse ))
+    {la_endfrac=FRACUNIT;if(la_freeaim)PTR_ShootPlane(FRACUNIT);}
+    if(SV_Active()&&!la_hit&&solidFraction<FRACUNIT&&la_endfrac>=solidFraction){
+        la_endfrac=solidFraction;
+        if(damage>0){
+            if(!SV_MapMode()||(t1->player?p_player_surface_damage:p_monster_surface_damage))SV_Impact(solidPoint,solidOwner,2.f);
+            P_SpawnPuff((fixed_t)(solidPoint[0]*FRACUNIT),(fixed_t)(solidPoint[1]*FRACUNIT),(fixed_t)(solidPoint[2]*FRACUNIT));
+        }
+    }
     la_freeaim = false;
+    if(P_ShotTraced&&damage)P_ShotTraced(t1,la_hit,t1->x,t1->y,shootz,t1->x+FixedMul(x2-t1->x,la_endfrac),t1->y+FixedMul(y2-t1->y,la_endfrac),shootz+FixedMul(aimslope,FixedMul(la_endfrac,attackrange)));
 }
  
 
@@ -1273,6 +1381,7 @@ boolean	PTR_UseTraverse (intercept_t* in)
 //
 void P_UseLines (player_t*	player) 
 {
+    if(SV_Active()&&!SV_MapMode()){SV_Use(player);return;}
     int		angle;
     fixed_t	x1;
     fixed_t	y1;
@@ -1370,6 +1479,7 @@ P_RadiusAttack
     bombspot = spot;
     bombsource = source;
     bombdamage = damage;
+    SV_Blast(spot,damage);
 	
     for (y=yl ; y<=yh ; y++)
 	for (x=xl ; x<=xh ; x++)
@@ -1468,6 +1578,7 @@ P_ChangeSector
 {
     int		x;
     int		y;
+    SV_SectorChanged(sector);
 	
     nofit = false;
     crushchange = crunch;

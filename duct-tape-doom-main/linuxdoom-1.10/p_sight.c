@@ -30,6 +30,8 @@ rcsid[] = "$Id: p_sight.c,v 1.3 1997/01/28 22:08:28 b1 Exp $";
 
 #include "i_system.h"
 #include "p_local.h"
+#include "p_solid.h"
+#include "p_digwall.h"
 
 // State.
 #include "r_state.h"
@@ -194,6 +196,16 @@ boolean P_CrossSubsector (int num)
 	if (s1 == s2)
 	    continue;	
 
+
+        frac=P_InterceptVector2(&strace,&divl);
+        fixed_t middle=bottomslope+(topslope-bottomslope)/2;
+        if(P_GlobalDigBreachRay((int)(line-lines),
+            (strace.x+FixedMul(strace.dx,frac))/(float)FRACUNIT,
+            (strace.y+FixedMul(strace.dy,frac))/(float)FRACUNIT,
+            (sightzstart+FixedMul(middle,frac))/(float)FRACUNIT,
+            strace.dx/(float)FRACUNIT,strace.dy/(float)FRACUNIT,middle/(float)FRACUNIT)){
+            bottomslope=middle;topslope=middle+1;continue;
+        }
 	// stop because it is not two sided anyway
 	// might do this after updating validcount?
 	if ( !(line->flags & ML_TWOSIDED) )
@@ -308,6 +320,7 @@ P_CheckSight
     int		bytenum;
     int		bitnum;
     
+    {int solid=SV_Sight(t1,t2);if(solid>=0)return solid;}
     // First check for trivial rejection.
 
     // Determine subsector entries in REJECT table.
@@ -318,7 +331,7 @@ P_CheckSight
     bitnum = 1 << (pnum&7);
 
     // Check in REJECT table.
-    if (rejectmatrix[bytenum]&bitnum)
+    if (!P_GlobalDigThroughEnabled() && (rejectmatrix[bytenum]&bitnum))
     {
 	sightcounts[0]++;
 
