@@ -59,7 +59,7 @@ static boolean P_PlanPursuit(mobj_t *actor,pursuit_t *route)
     // Bound both node count and elapsed work: damaged geometry makes a node
     // much more expensive than an ordinary map probe. Resume the same search
     // on a later update without weakening its collision checks.
-    // Waiting actors stop their smooth substeps until their route is ready.
+    // Route planning yields without suspending ordinary chase/attack updates.
     for(int work=0;work<24&&pursuitExpanded<160;++work,++pursuitExpanded){
         if(work>0&&clock()-planStart>=CLOCKS_PER_SEC/500)break;
         int current=pursuitPending,score=0x7fffffff;
@@ -108,6 +108,10 @@ boolean P_PersistentPursuit(mobj_t *actor)
        ||!(actor->flags&MF_COUNTKILL)||(actor->flags&(MF_SKULLFLY|MF_MISSILE))||P_Unseen(actor->target))return false;
     if(pursuitSerial!=r_levelserial){memset(pursuit,0,sizeof(pursuit));pursuitSerial=r_levelserial;pursuitBudgetTic=-100;pursuitSearchActor=NULL;}
     if(pursuitSearchActor&&leveltime-pursuitLastWork>TICRATE)pursuitSearchActor=NULL;
+    // Local chasing may move while planning; discard a search whose origin
+    // is now too far behind, rather than steering back to stale waypoints.
+    if(pursuitSearchActor==actor&&P_AproxDistance(actor->x-pursuitOriginX,actor->y-pursuitOriginY)>PURSUIT_STEP)
+        pursuitSearchActor=NULL;
     pursuit_t *route=NULL;
     for(int i=0;i<256;++i)if(pursuit[i].actor==actor){route=&pursuit[i];break;}
     if(!route){for(int i=0;i<256;++i)if(!pursuit[i].actor){route=&pursuit[i];break;}}
@@ -123,9 +127,9 @@ boolean P_PersistentPursuit(mobj_t *actor)
     if(route->next>=route->count){
         if(pursuitSearchActor&&pursuitSearchActor!=actor)return false;
         if(!pursuitSearchActor&&leveltime<route->retry)return false;
-        if(pursuitBudgetTic==leveltime){if(pursuitSearchActor==actor){actor->movedir=DI_NODIR;return true;}return false;}
+        if(pursuitBudgetTic==leveltime)return false;
         pursuitBudgetTic=leveltime;
-        if(!P_PlanPursuit(actor,route)){actor->movedir=DI_NODIR;return true;}
+        if(!P_PlanPursuit(actor,route)){actor->movecount=0;return false;}
     }
     if(route->next>=route->count)return false;
     fixed_t dx=route->x[route->next]-actor->x,dy=route->y[route->next]-actor->y;

@@ -15,6 +15,8 @@ void SV_Use(player_t *player);
 void SV_Player(player_t *player);
 void SV_Missile(mobj_t *thing);
 int SV_Explode(mobj_t *thing);
+int SV_ActorGroundImpact(mobj_t *missile,mobj_t *victim);
+void SV_MonsterContact(mobj_t *missile,mobj_t *victim);
 float SV_Trace(float x,float y,float z,float dx,float dy,float dz,float *point,int *owner);
 void SV_Impact(float *point,int owner,float radius);
 void SV_Blast(mobj_t *thing,int radius);

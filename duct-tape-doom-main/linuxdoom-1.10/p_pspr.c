@@ -47,6 +47,7 @@ int p_fluidfastpistol=1;
 #include "sounds.h"
 
 #include "p_pspr.h"
+#include "p_solid.h"
 #include "d_deh.h"
 
 #define LOWERSPEED		FRACUNIT*6
@@ -825,6 +826,8 @@ void A_Light2 (player_t *player, pspdef_t *psp)
 //
 void A_BFGSpray (mobj_t* mo) 
 {
+    mobj_t *groundHits[40];
+    int groundHitCount=0;
     int			i;
     int			j;
     int			damage;
@@ -844,6 +847,12 @@ void A_BFGSpray (mobj_t* mo)
 	if (!linetarget)
 	    continue;
 
+        // Forty spray rays can hit one monster; excavate its support once.
+        for(j=0;j<groundHitCount&&groundHits[j]!=linetarget;++j){}
+        if(j==groundHitCount){
+            groundHits[groundHitCount++]=linetarget;
+            SV_ActorGroundImpact(mo,linetarget);
+        }
 	if (R_BFGHit) R_BFGHit(mo,linetarget);
 	P_SpawnMobj (linetarget->x,
 		     linetarget->y,

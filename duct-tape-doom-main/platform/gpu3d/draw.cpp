@@ -57,7 +57,7 @@ void uploadFrame(SDL_GPUCommandBuffer *command,const std::vector<const std::vect
         stream(cursor,vertices.size()-cursor);
     };
     for(const auto *groups:{&batches,&shadowBatches,&decalBatches,&effectBatches,&effectAddBatches,&mirrorBatches})for(const auto &batch:*groups)place(batch.second);
-    place(mistVertices);place(shaftVertices);place(particleVertices);place(heatVertices);place(skyVertices);place(glassVertices);
+    place(rubbleEmissionVertices);place(mistVertices);place(shaftVertices);place(particleVertices);place(heatVertices);place(skyVertices);place(glassVertices);
     for(const auto *vertices:transient)place(*vertices);
     for(auto it=residentVertices.begin();it!=residentVertices.end();){
         if(it->second.seen!=uploadSerial){SDL_ReleaseGPUBuffer(device,it->second.arena.buffer);it=residentVertices.erase(it);}else ++it;

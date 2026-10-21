@@ -66,6 +66,7 @@ bool wallSpan(const line_t &line,int side,int section,WallSpan &span) {
     return span.top>span.bottom;
 }
 #include "impact_particles.inc"
+#include "surface_glow.inc"
 #include "fluid_effects.inc"
 
 void wallImpact(line_t *line,int side,fixed_t fx,fixed_t fy,fixed_t fz) {
@@ -235,6 +236,7 @@ void buildImpacts(const Uniforms &camera) {
     debris.erase(std::remove_if(debris.begin(),debris.end(),[&](const Debris &p){return now-p.born>p.life||now<p.born;}),debris.end());
     drawImpactParticles(camera);
     drawFluidEffects(camera);
+    drawSurfaceGlows();
     // Debris moves at the tic rate, like the rings, stretches upright while
     // it falls fast and shrinks once before it is gone.
     for(const auto &p:debris) {
@@ -401,6 +403,61 @@ extern "C" void I_TestImpactOptions() {
     impactParticles=std::move(savedParticles);
     debris=std::move(savedDebris);wallDecals=std::move(savedWalls);scorches=std::move(savedScorches);
     settings.gunImpacts=gun;settings.shootableLights=lights;impactRandom=random;
+    {
+        auto saved=std::move(rubbleParticles);auto savedChunks=std::move(debris);
+        for(int type:{MT_ROCKET,MT_BFG,MT_PLASMA,MT_TROOPSHOT,MT_HEADSHOT,MT_BRUISERSHOT,MT_FATSHOT,MT_ARACHPLAZ,MT_TRACER}){
+            rubbleParticles.clear();rubbleImpact(type,0,0,0,0,0,1);
+            if(rubbleParticles.empty())I_Error("Missing rubble projectile profile");
+            if((type==MT_BFG||type==MT_BRUISERSHOT)&&rubbleParticles[0].color[1]!=1)I_Error("Missing green rubble tint");
+            for(int t=0;t<60;++t)tickRubbleEffects();
+            if(!rubbleParticles.empty())I_Error("Rubble effect did not expire");
+        }
+        for(int i=0;i<100;++i)rubbleImpact(MT_BFG,0,0,0,0,0,1);
+        if(rubbleParticles.size()!=192)I_Error("Rubble particle cap failed");
+        rubbleParticles=std::move(saved);debris=std::move(savedChunks);
+        puts("PASS rubble projectile profiles, expiration and shared 192 particle cap");
+    }
+    {
+        auto saved=std::move(surfaceGlows);
+        SurfaceGlow g{{0,0,0},{1,0,0},{0,1,1},gameSeconds(),3,24,units(sectors[0].ceilingheight),0,1};
+        fixed_t height=sectors[0].ceilingheight;
+        sectors[0].ceilingheight+=16*FRACUNIT;
+        if(std::abs(surfaceGlowCenter(g).z-16)>0.01f)I_Error("Surface glow did not follow door height");
+        sectors[0].ceilingheight=height;
+        int rock=W_CheckNumForName((char*)"DIGROCK"),material=rock>=0?-1-rock:R_TextureNumForName((char*)"GRAY1");
+        auto &mesh=batches[material];auto oldMesh=std::move(mesh);auto oldSections=std::move(vertexSections[&mesh]);
+        mesh.resize(3);mesh[0].y=-4;mesh[0].z=-4;mesh[1].y=4;mesh[1].z=-4;mesh[2].z=4;
+        mesh.resize(6);mesh[3]=mesh[1];mesh[4]=mesh[0];mesh[5].x=3;mesh[5].y=0;mesh[5].z=-8;
+        vertexSections[&mesh]={{~uint64_t(0),0,6,1}};
+        auto folded=glowFacets(mesh,0,6);
+        if(folded[0].fold[0]<=0)I_Error("Concave edge missed by heat mask");
+        mesh[5].x=0;auto flat=glowFacets(mesh,0,6);
+        if(flat[0].fold[0]!=0)I_Error("Flat triangulation edge glows");
+        mesh[5].x=-3;auto convex=glowFacets(mesh,0,6);
+        if(convex[0].fold[0]!=0)I_Error("Convex edge treated as a hot crevice");
+        mesh[5].x=3;
+        surfaceGlows={g};auto &overlay=effectAddBatches[surfaceGlowImage()];overlay.clear();drawSurfaceGlows();
+        if(overlay.size()<=6)I_Error("Surface glow did not follow concave concrete edges");
+        if(rubbleEmissionVertices.size()!=overlay.size()||rubbleEmissionVertices[0].green<=1)I_Error("Rubble missing HDR bloom source");
+        g.color={.025f,.4f,1.f};surfaceGlows={g};overlay.clear();drawSurfaceGlows();
+        if(overlay.size()!=mesh.size())I_Error("Plasma field did not cover surviving facets");
+        for(const auto& v:overlay)if(v.mode!=2048u||v.sunV!=g.radius)I_Error("Plasma field lost local coordinates");
+        for(int type:{MT_BFG,MT_ROCKET,MT_TRACER,MT_TROOPSHOT,MT_HEADSHOT,MT_FATSHOT,MT_BRUISERSHOT,MT_ARACHPLAZ}){
+            bool thermal=type==MT_ROCKET||type==MT_TRACER||type==MT_TROOPSHOT||type==MT_HEADSHOT||type==MT_FATSHOT;
+            g.weapon=type;g.color=type==MT_BFG?std::array<float,3>{.25f,1,.12f}:std::array<float,3>{1,.4f,.02f};
+            if(type==MT_ARACHPLAZ)g.color={.025f,.4f,1.f};
+            surfaceGlows={g};overlay.clear();drawSurfaceGlows();
+            if(overlay.size()!=mesh.size()||effectBatches[surfaceGlowImage()].empty())I_Error("Monster impact fell back to legacy facets");
+            if(type==MT_BFG&&overlay.size()!=mesh.size())I_Error("Weapon heat field lost concrete coverage");
+            if(type==MT_ROCKET&&(overlay.empty()||effectBatches[surfaceGlowImage()].empty()))I_Error("Rocket missing molten edges or scorch");
+            for(const auto& v:overlay)if(v.mode!=(2048u|(thermal?1024u:0u)))I_Error("Wrong projectile heat field profile");
+        }
+        overlay.clear();mesh.clear();vertexSections[&mesh].clear();drawSurfaceGlows();
+        if(!overlay.empty()||!rubbleEmissionVertices.empty()||!effectBatches[surfaceGlowImage()].empty())I_Error("Surface glow remained over removed concrete");
+        mesh=std::move(oldMesh);vertexSections[&mesh]=std::move(oldSections);
+        surfaceGlows=std::move(saved);
+        puts("PASS surface glow follows door height and surviving concrete only");
+    }
     puts("Uzi impact toggles and particle budget passed.");
 }
 

@@ -11,5 +11,6 @@ void main() {
     float z=0.0;
 #endif
     gl_Position=vec4(p*vec2(2,-2)+vec2(-1,1),z,1);
+    vToEye=vec3(0,0,1);
     vUV=p;vLight=1;vDistance=0;vMode=MODE_SCREEN;vWorld=vec3(0);vTint=vec3(0);vLightMask=uvec2(0);
 }

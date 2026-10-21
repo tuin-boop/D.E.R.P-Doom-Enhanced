@@ -191,6 +191,8 @@ extern std::map<int,std::vector<Vertex>> batches,shadowBatches,decalBatches,effe
 // player's own included (addThing in scene3d/geometry.cpp).
 extern std::map<int,std::vector<Vertex>> mirrorBatches;
 extern std::vector<Vertex> mistVertices,particleVertices,heatVertices;
+// HDR-only rubble emission, depth tested before the bloom blur.
+extern std::vector<Vertex> rubbleEmissionVertices;
 // Sunbeam ribbons, drawn additively in the mist pass.
 extern std::vector<Vertex> shaftVertices;
 // Sky ceilings and sky walls, drawn into depth with the sky shader.
@@ -265,3 +267,5 @@ void saveScreenshot(const void *bgra,int width,int height,int stride);
 void updateTitle(int width,int height,const char *renderer);
 } // namespace doom3d
 #endif
+
+

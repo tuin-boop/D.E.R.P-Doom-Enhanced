@@ -497,6 +497,7 @@ void flatImpactParticles(float x,float y,float z,bool ceiling,Image &image,float
 void doorMotion(sector_t *sector);
 void craterCrumble(float x,float y,float z);
 void surfaceChip(float x,float y,float z,float nx,float ny,float nz);
+void rubbleImpact(int type,float x,float y,float z,float nx,float ny,float nz);
 void solidBulletImpact(float x,float y,float z,float nx,float ny,float nz);
 void doorDamage(line_t *line,int side,fixed_t x,fixed_t y,fixed_t z,int broken);
 void watchSplashes();

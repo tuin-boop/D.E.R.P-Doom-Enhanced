@@ -16,6 +16,7 @@
 #define MODE_EXCAVATED_FLAT  128u  // non-sprite: crater retains its parent floor/ceiling bake
 #define MODE_GROUNDED        128u  // darkened feet of things resting on the floor
 #define MODE_BLOOD           256u  // blood decal; vTint carries wetness and drying
+#define MODE_ROCK           512u  // non-sprite: continuous excavation material
 #define MODE_HARD_SILHOUETTE 512u  // shadow pass: keep the sprite's pixel outline
 #define MODE_SOFT            1024u // effect sprite: dithers out at floors, drawn in front of walls
 #define MODE_STIPPLED        1024u // decal pass only: a hard silhouette's edge breaks into a stipple

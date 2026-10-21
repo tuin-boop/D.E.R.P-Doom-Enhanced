@@ -8,6 +8,7 @@ struct FluidParticle {
 struct FluidBurst {float x,y,z;int type,tic;};
 struct FluidMark {int line,side,section,sector,mask;bool ceiling,flip;float u,z,size,born,fadeStart,life;std::array<float,3> color;unsigned supportRevision=~0u;};
 static std::vector<FluidParticle> fluidParticles;
+static std::vector<FluidParticle> rubbleParticles;
 static std::vector<FluidBurst> fluidBursts;
 static std::vector<FluidMark> fluidMarks;
 static unsigned fluidSerial;
@@ -22,7 +23,7 @@ static int fluidImage(int mask) {
     return lump;
 }
 static void resetFluidEffects() {
-    if(fluidSerial!=r_levelserial){fluidParticles.clear();fluidBursts.clear();fluidMarks.clear();fluidSerial=r_levelserial;}
+    if(fluidSerial!=r_levelserial){rubbleParticles.clear();fluidParticles.clear();fluidBursts.clear();fluidMarks.clear();fluidSerial=r_levelserial;}
 }
 static void fluidParticle(float x,float y,float z,int mask,bool add,std::array<float,3> color,float life,float size,
                           float vx=0,float vy=0,float vz=0,float az=0,float alpha=1,float growth=0) {
@@ -31,6 +32,49 @@ static void fluidParticle(float x,float y,float z,int mask,bool add,std::array<f
     if(fluidParticles.size()>=4096)return;
     fluidParticles.push_back({x,y,z,vx,vy,vz,az,size,growth,alpha,0,life,mask,add,color});
 }
+// Cosmetic surface bursts use a separate, small budget and no gameplay RNG.
+// They remain available when the optional Fluid weapon replacement is disabled.
+void rubbleImpact(int type,float x,float y,float z,float nx,float ny,float nz) {
+    resetFluidEffects();
+    if(std::getenv("DOOM_TEST_RUBBLE"))printf("RUBBLE hit type %d tic %d at %.1f %.1f %.1f normal %.2f %.2f %.2f\n",type,gametic,x,y,z,nx,ny,nz);
+    bool rocket=type==MT_ROCKET||type==MT_TRACER;
+    bool bfg=type==MT_BFG, plasma=type==MT_PLASMA||type==MT_ARACHPLAZ;
+    bool green=type==MT_BRUISERSHOT, fat=type==MT_FATSHOT;
+    if(!rocket&&!bfg&&!plasma&&!green&&!fat&&type!=MT_TROOPSHOT&&type!=MT_HEADSHOT)return;
+    std::array<float,3> color=bfg||green?std::array<float,3>{.25f,1,.12f}:
+        plasma?std::array<float,3>{.3f,.55f,1}:std::array<float,3>{1,.32f,.055f};
+    addSurfaceGlow(type,x,y,z,nx,ny,nz,color);
+    if(rocket||bfg){surfaceChip(x+nx*2,y+ny*2,z+nz*2,nx,ny,nz);}
+    int count=bfg?12:rocket?12:fat?8:plasma?4:6;
+    float speed=bfg?2.8f:rocket?2.2f:plasma?.9f:1.4f;
+    auto emit=[&](int mask,bool add,std::array<float,3> c,float life,float size,float vx,float vy,float vz,float gravity,float growth){
+        if(rubbleParticles.size()>=192)return;
+        rubbleParticles.push_back({x+nx*2,y+ny*2,z+nz*2,vx,vy,vz,gravity,size,growth,add?.85f:.5f,0,life,mask,add,c});
+    };
+    for(int i=0;i<count;++i){
+        float vx=randomRange(-1,1),vy=randomRange(-1,1),vz=randomRange(-1,1);
+        // Reflect inward velocity: fragments initially leave the hit surface.
+        float dot=vx*nx+vy*ny+vz*nz;
+        if(dot<0){vx-=2*dot*nx;vy-=2*dot*ny;vz-=2*dot*nz;}
+        // Crisp chips remain readable after the stock explosion has faded.
+        bool stone=rocket;
+        emit(i%5,!stone,stone?std::array<float,3>{.6f,.56f,.5f}:color,
+             plasma?24:42,plasma?randomRange(.8f,1.8f):randomRange(3,6),
+             (vx+nx)*speed,(vy+ny)*speed,(vz+nz)*speed,-.08f,-.025f);
+        if((bfg||green||fat)&&i%3==0)
+            emit(12,true,color,40,9,(vx+nx)*speed,(vy+ny)*speed,(vz+nz)*speed,-.04f,-.1f);
+    }
+    emit(12,true,color,bfg?35:fat?35:plasma?18:12,bfg?38:fat?26:plasma?7:18,nx*.1f,ny*.1f,nz*.1f,0,-.35f);
+    if(!plasma){
+        for(int i=0;i<(fat?3:2);++i)
+            emit(13,false,{.3f,.28f,.25f},fat?48:38,rocket?24:16,nx*.35f+randomRange(-.3f,.3f),ny*.35f+randomRange(-.3f,.3f),nz*.35f+.4f,0,.5f);
+    }
+}
+static void tickRubbleEffects(){
+    for(auto &p:rubbleParticles){++p.age;p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;p.vz+=p.az;p.vx*=.96f;p.vy*=.96f;p.size+=p.growth;}
+    rubbleParticles.erase(std::remove_if(rubbleParticles.begin(),rubbleParticles.end(),[](const auto &p){return p.age>=p.life||p.size<=0;}),rubbleParticles.end());
+}
+
 static std::array<float,3> fluidColor(int type,float low=100,float high=250) {
     float c=randomRange(low,high)/255.f;
     return type==MT_ROCKET?std::array<float,3>{1,c,c*.5f}:type==MT_BFG?std::array<float,3>{c,1,c}:std::array<float,3>{c,c,1};
@@ -156,7 +200,7 @@ void fluidProjectileFlight(const mobj_t &mo) {
         fluidParticle(x+randomRange(-4,4),y+randomRange(-4,4),z+(type==MT_BFG?15:5),12,true,fluidColor(type,50,250),randomRange(6,12),randomRange(2,5),vx+std::cos(a)*speed,vy+std::sin(a)*speed,vz+randomRange(-2,2),-.2f);}
 }
 void tickFluidEffects() {
-    resetFluidEffects();
+    resetFluidEffects();tickRubbleEffects();
     if(!settings.fluidWeapons){fluidParticles.clear();fluidBursts.clear();fluidMarks.clear();return;}
     for(auto &p:fluidParticles){p.age++;p.x+=p.vx;p.y+=p.vy;p.z+=p.vz;p.vz+=p.az;p.size+=p.growth;}
     fluidParticles.erase(std::remove_if(fluidParticles.begin(),fluidParticles.end(),[](const auto &p){return p.age>=p.life||p.size<=0;}),fluidParticles.end());
@@ -225,7 +269,7 @@ static void drawFluidEffects(const Uniforms &camera) {
                 for(size_t k=1;k+1<polygon.size();++k)for(Point p:{polygon[0],polygon[k],polygon[k+1]})out.push_back(v(p));}
         }
     }
-    std::vector<const FluidParticle*> sorted;for(const auto &p:fluidParticles)sorted.push_back(&p);
+    std::vector<const FluidParticle*> sorted;for(const auto &p:fluidParticles)sorted.push_back(&p);for(const auto &p:rubbleParticles)sorted.push_back(&p);
     auto depth=[&](const auto *p){return (p->x-camera.eye[0])*camera.forward[0]+(p->y-camera.eye[1])*camera.forward[1]+(p->z-camera.eye[2])*camera.forward[2];};
     std::sort(sorted.begin(),sorted.end(),[&](auto a,auto b){return depth(a)>depth(b);});
     for(auto ptr:sorted){const auto &p=*ptr;if(depth(ptr)<1)continue;int lump=fluidImage(p.mask);const auto &im=fluidMasks[p.mask];

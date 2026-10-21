@@ -25,6 +25,8 @@ static std::string saved;
 static float previousDoorZ=0;
 static mobj_t *pendingMissile=nullptr;
 static mobj_t *directImpact=nullptr;
+static mobj_t *actorMissile=nullptr;
+static int actorImpactTic=-1,actorImpactResult=0;
 static float pendingPoint[6];
 static int pendingOwner;
 static float unit(fixed_t x){return x/(float)FRACUNIT;}
@@ -91,7 +93,7 @@ int SV_Active(){
  if(SV_MapMode()){
   if(!numsectors||!sectors)return 0;
   if(serial!=r_levelserial){
-   mapWorld.reset(readMapSource());mapHeights.clear();directImpact=nullptr;
+   mapWorld.reset(readMapSource());mapHeights.clear();directImpact=nullptr;actorMissile=nullptr;
    for(int i=0;i<numsectors;++i)mapHeights.push_back({sectors[i].floorheight,sectors[i].ceilingheight});
    serial=r_levelserial;
   }
@@ -315,10 +317,34 @@ void SV_Missile(mobj_t *m){
  P_ExplodeMissile(m);
  pendingMissile=nullptr;
 }
+// Actor collisions stop a missile before its forward surface trace. Probe
+// the victim's actual support, including excavated floors, before death moves it.
+int SV_ActorGroundImpact(mobj_t *m,mobj_t *victim){
+ if(!m||!victim||!SV_MapMode()||!SV_Active()||!p_breakablewalls)return 0;
+ if(!(m->target&&m->target->player?p_player_surface_damage:p_monster_surface_damage))return 0;
+ float hit[6];int owner;
+ if(SV_Trace(unit(victim->x),unit(victim->y),unit(victim->z)+2,0,0,-6,hit,&owner)>=1||hit[5]<.5f)return 0;
+ float radius=m->type==MT_PLASMA?8.f:24.f;
+ float depth=m->type==MT_ROCKET?4.f:m->type==MT_BFG?8.f:m->type==MT_PLASMA?.35f:.5f;
+ impact(hit,owner,radius,depth);
+ if(R_RubbleImpact)R_RubbleImpact(m->type,hit[0],hit[1],hit[2],hit[3],hit[4],hit[5]);
+ return 1;
+}
+void SV_MonsterContact(mobj_t *m,mobj_t *victim){
+ if(!SV_MapMode()||!SV_Active())return;
+ actorMissile=m;actorImpactTic=gametic;
+ actorImpactResult=SV_ActorGroundImpact(m,victim);
+}
 int SV_Explode(mobj_t *m){
  if(!SV_Active()||!(m->flags&MF_MISSILE))return 0;
  directImpact=nullptr;
- if(SV_MapMode()&&m->type!=MT_ROCKET&&
+ if(actorMissile==m&&actorImpactTic==gametic){
+  actorMissile=nullptr;
+  // A direct actor collision must not also carve a wall behind the victim.
+  // Rocket radius damage still runs, but does not repeat this surface cut.
+  directImpact=m;return actorImpactResult;
+ }
+ if(SV_MapMode()&&
     !(m->target&&m->target->player?p_player_surface_damage:p_monster_surface_damage))return 0;
  float hit[6];int owner;
  if(pendingMissile==m){std::copy(pendingPoint,pendingPoint+6,hit);owner=pendingOwner;}
@@ -331,11 +357,13 @@ int SV_Explode(mobj_t *m){
   float radius=m->type==MT_PLASMA?8.f:24.f;
   float depth=m->type==MT_ROCKET?4.f:m->type==MT_BFG?8.f:m->type==MT_PLASMA?.35f:.5f;
   impact(hit,owner,radius,depth);
+  if(p_breakablewalls&&R_RubbleImpact)R_RubbleImpact(m->type,hit[0],hit[1],hit[2],hit[3],hit[4],hit[5]);
  }else SV_Impact(hit,owner,m->type==MT_ROCKET?18.f:4.f);
  directImpact=m;return 1;
 }
 void SV_Blast(mobj_t *m,int radius){
  if(!SV_MapMode()||!SV_Active()||!p_breakablewalls)return;
+ if(m->type!=MT_BARREL&&!(m->target&&m->target->player?p_player_surface_damage:p_monster_surface_damage))return;
  if(directImpact==m){directImpact=nullptr;return;}
  lab::Vec start=position(m);if(m->type==MT_BARREL)start.z+=unit(m->height)*.5f;
  float nearest=std::min(96.f,float(radius)),best[6];bool found=false;
@@ -345,7 +373,10 @@ void SV_Blast(mobj_t *m,int radius){
   float fraction=SV_Trace(start.x,start.y,start.z,d.x*nearest,d.y*nearest,d.z*nearest,point,&owner);
   if(fraction<1){nearest*=fraction;std::copy(point,point+6,best);found=true;}
  }
- if(found)impact(best,0,24.f,std::max(.5f,4.f*(1-nearest/128)));
+ if(found){
+  impact(best,0,24.f,std::max(.5f,4.f*(1-nearest/128)));
+  if(R_RubbleImpact)R_RubbleImpact(m->type==MT_BARREL?MT_ROCKET:m->type,best[0],best[1],best[2],best[3],best[4],best[5]);
+ }
 }
 int SV_Sight(mobj_t *a,mobj_t *b){
  if(!SV_Active())return -1;

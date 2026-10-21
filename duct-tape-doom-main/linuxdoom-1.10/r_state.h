@@ -115,6 +115,7 @@ extern void (*R_RocketImpact)(mobj_t *rocket);
 extern void (*R_DoorMotion)(sector_t *sector);
 extern void (*R_CraterCrumble)(float x,float y,float z);
 extern void (*R_SurfaceChip)(float x,float y,float z,float nx,float ny,float nz);
+extern void (*R_RubbleImpact)(int type,float x,float y,float z,float nx,float ny,float nz);
 extern void (*R_SolidBulletImpact)(float x,float y,float z,float nx,float ny,float nz);
 extern void (*R_DoorDamage)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z, int broken);
 extern void (*R_WallImpact)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z);

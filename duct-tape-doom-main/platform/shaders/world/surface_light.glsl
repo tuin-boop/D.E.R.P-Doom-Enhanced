@@ -17,7 +17,7 @@ void surfaceLight(SectorLit lit,bool mapped,vec3 normal,vec3 screenNormal,bool g
     vec3 staticLight=useBake?baked.rgb*staticKept*occlusion:vec3(0);
     float staticShare=useBake&&c.bake.z>0.0?direction.b:0.0;
     bool staticDetail=staticShare>0.05&&dot(staticLight,vec3(0.299,0.587,0.114))>0.02;
-    bool detail=(uint(c.flashlightTint.w)&FEATURE_SURFACE_DETAIL)!=0u&&(any(notEqual(mask,uvec2(0)))||staticDetail);
+    bool detail=(vMode&MODE_ROCK)==0u&&(uint(c.flashlightTint.w)&FEATURE_SURFACE_DETAIL)!=0u&&(any(notEqual(mask,uvec2(0)))||staticDetail);
     // Glass is smooth: its bulge replaces the artwork's bump detail,
     // and it takes a tighter, stronger highlight than painted metal.
     float busy=0.0;

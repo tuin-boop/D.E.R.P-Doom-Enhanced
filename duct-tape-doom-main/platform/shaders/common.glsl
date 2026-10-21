@@ -42,6 +42,9 @@ layout(location=8) flat VARYING uint vStatic;
 // Sprites: the sector light's lamp color (lampTint in baked_lighting.h), unorm bytes.
 layout(location=9) flat VARYING uint vLampTint;
 
+// Camera vector for shallow relief on transient impact materials.
+layout(location=10) VARYING vec3 vToEye;
+
 float saturate(float x) {return clamp(x,0.0,1.0);}
 vec3 saturate(vec3 x) {return clamp(x,vec3(0.0),vec3(1.0));}
 // GLSL leaves % undefined for negative operands.

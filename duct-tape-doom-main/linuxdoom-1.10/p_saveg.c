@@ -388,7 +388,7 @@ void P_UnArchiveThinkers (void)
 	    break;
 			
 	  default:
-	    I_Error ("Unknown tclass %i in savegame",tclass);
+	    I_Error ("Unknown tclass %i in savegame after %u actors (record %u bytes)",tclass,(unsigned)count,(unsigned)sizeof(mobj_t));
 	}
 	
     }

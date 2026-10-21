@@ -140,6 +140,17 @@ void main() {
     }
     vec4 color;
     if(sprite) color=indexed(image,palette,uv,c.effects.w==1.0,false);
+    else if((vMode&MODE_ROCK)!=0u) {
+        // Shared world coordinates and interpolated field-gradient weights:
+        // adjacent triangles sample the same stone rather than separate UV islands.
+        vec3 weights=max(vTint,vec3(.001));weights*=weights;
+        weights/=weights.x+weights.y+weights.z;
+        vec3 px=abs(dp1)+abs(dp2);
+        vec3 p=vWorld*.75;
+        color=surfaceTexture(image,p.yz,px.yz*.75,lod)*weights.x
+             +surfaceTexture(image,p.xz,px.xz*.75,lod)*weights.y
+             +surfaceTexture(image,p.xy,px.xy*.75,lod)*weights.z;
+    }
     else color=surfaceTexture(image,uv,texelPixel,lod);
     // Animated flats and walls crossfade toward their next frame.
     if(blend>0.0) color=mix(color,surfaceTexture(nextImage,uv,texelPixel,lod),blend);

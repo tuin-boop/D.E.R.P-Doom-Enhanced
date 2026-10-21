@@ -8,7 +8,7 @@ SDL_GPUSampleCount sampleCount=SDL_GPU_SAMPLECOUNT_1;
 static SDL_GPUShader *worldVertexShader,*reflectVertexShader,*screenVertexShader,*skyVertexShader;
 SDL_GPUGraphicsPipeline *opaquePipeline,*skyPipeline,*skySurfacePipeline,*reflectSkySurfacePipeline,*worldPipeline,*shadowPipeline,*decalPipeline,*effectAddPipeline,*particlePipeline,*heatPipeline,
     *weaponPipeline,*weaponAddPipeline,*hudPipeline,*solidPipeline,*mistPipeline,*shaftPipeline,*overlayWeaponPipeline,*overlayWeaponAddPipeline,*overlayHudPipeline,*overlaySolidPipeline,
-    *reflectOpaquePipeline,*reflectSkyPipeline,*reflectWorldPipeline,*emissionPipeline,*blurPipeline,*presentPipeline,*depthPipeline,*prepassPipeline,*coveragePipeline,*cutoutPipeline,
+    *reflectOpaquePipeline,*reflectSkyPipeline,*reflectWorldPipeline,*emissionPipeline,*rubbleEmissionPipeline,*blurPipeline,*presentPipeline,*depthPipeline,*prepassPipeline,*coveragePipeline,*cutoutPipeline,
     *settingsPipeline,*glassPipeline,*reflectPrepassPipeline;
 SDL_GPUTexture *multisampleTexture,*colorTexture,*depthTexture,*sceneDepth,*emissionTexture,*emissionDepth,*bloomScratch,*bloomTexture;
 int width,height;
@@ -133,6 +133,7 @@ bool createPipelines() {
     reflectSkySurfacePipeline=pipeline(rv,skySurface,opaqueBlend,depthWrite,one,color);
     reflectWorldPipeline=pipeline(rv,world,mirrorBlend,depthWrite,one,color);
     emissionPipeline=pipeline(wv,emission,opaqueBlend,depthWrite,one,glow);
+    rubbleEmissionPipeline=pipeline(wv,particle,addBlend,depthTest,one,glow);
     blurPipeline=pipeline(sv,blur,opaqueBlend,noDepth,one,glow);
     presentPipeline=pipeline(sv,present,opaqueBlend,noDepth,one,swapchainFormat);
     settingsPipeline=pipeline(wv,hud,alphaBlend,noDepth,one,swapchainFormat);
@@ -143,14 +144,14 @@ bool createPipelines() {
         if(*s) {SDL_ReleaseGPUShader(device,*s);*s=nullptr;}
     for(auto *p:{opaquePipeline,skyPipeline,skySurfacePipeline,reflectSkySurfacePipeline,worldPipeline,shadowPipeline,decalPipeline,effectAddPipeline,particlePipeline,heatPipeline,weaponPipeline,weaponAddPipeline,overlayWeaponAddPipeline,hudPipeline,
                  solidPipeline,mistPipeline,shaftPipeline,overlayWeaponPipeline,overlayHudPipeline,overlaySolidPipeline,reflectOpaquePipeline,
-                 reflectSkyPipeline,reflectWorldPipeline,emissionPipeline,blurPipeline,presentPipeline,depthPipeline,prepassPipeline,coveragePipeline,cutoutPipeline,settingsPipeline,glassPipeline,reflectPrepassPipeline})
+                 reflectSkyPipeline,reflectWorldPipeline,emissionPipeline,rubbleEmissionPipeline,blurPipeline,presentPipeline,depthPipeline,prepassPipeline,coveragePipeline,cutoutPipeline,settingsPipeline,glassPipeline,reflectPrepassPipeline})
         if(!p)return false;
     return true;
 }
 void releasePipelines() {
     for(SDL_GPUGraphicsPipeline **p:{&opaquePipeline,&skyPipeline,&skySurfacePipeline,&reflectSkySurfacePipeline,&worldPipeline,&shadowPipeline,&decalPipeline,&effectAddPipeline,&particlePipeline,&heatPipeline,
             &weaponPipeline,&hudPipeline,&solidPipeline,&mistPipeline,&shaftPipeline,&overlayWeaponPipeline,&overlayHudPipeline,&overlaySolidPipeline,
-            &reflectOpaquePipeline,&reflectSkyPipeline,&reflectWorldPipeline,&emissionPipeline,&blurPipeline,&presentPipeline,&depthPipeline,&prepassPipeline,&coveragePipeline,&cutoutPipeline,
+            &reflectOpaquePipeline,&reflectSkyPipeline,&reflectWorldPipeline,&emissionPipeline,&rubbleEmissionPipeline,&blurPipeline,&presentPipeline,&depthPipeline,&prepassPipeline,&coveragePipeline,&cutoutPipeline,
             &settingsPipeline,&glassPipeline,&reflectPrepassPipeline})
         release(*p);
 }

@@ -51,7 +51,7 @@ void MapSource::reset(std::vector<MapRegion> input){
   }
   r.map=std::move(map);next.push_back(std::move(r));
  }
- regions=std::move(next);
+ regions=std::move(next);horizontalTiles.clear();
 }
 bool MapSource::heights(int sector,float floor,float ceiling){
  if(!std::isfinite(floor)||!std::isfinite(ceiling))return false;
@@ -100,29 +100,36 @@ Volume MapSource::tile(int x,int y,int z,bool mesh)const{
   throw std::invalid_argument("Tile coordinate out of range");
  Volume out;out.create(tileCells+1,tileCells+1,tileCells+1,step,
   {float(x)*tileCells*step,float(y)*tileCells*step,float(z)*tileCells*step});
- // Cache horizontal distances once per column, not for every voxel.
- std::vector<const Region*> nearby;
+ // Lift/door motion changes vertical intervals only. Reuse the immutable
+ // outline distances across heights and vertically adjacent voxel tiles.
+ const std::array<int,2> key{x,y};
+ if(horizontalTiles.size()>=2048&&!horizontalTiles.count(key))horizontalTiles.clear();
+ auto inserted=horizontalTiles.try_emplace(key);
+ auto& columns=inserted.first->second;
  Vec end=out.point(out.nx-1,out.ny-1,out.nz-1);
- for(const auto& r:regions){
-  if(r.map.ceiling<=r.map.floor||r.hi.x<out.origin.x-step*2||r.lo.x>end.x+step*2||
-     r.hi.y<out.origin.y-step*2||r.lo.y>end.y+step*2||
-     r.map.ceiling<out.origin.z-step*2||r.map.floor>end.z+step*2)continue;
-  nearby.push_back(&r);
- }
- std::vector<float> distances(nearby.size());
- for(int iy=0;iy<out.ny;++iy)for(int ix=0;ix<out.nx;++ix){
-  Vec p=out.point(ix,iy,0);
-  for(size_t i=0;i<nearby.size();++i){
-   const auto& r=*nearby[i];
-   distances[i]=(p.x<r.lo.x-step*2||p.x>r.hi.x+step*2||
-    p.y<r.lo.y-step*2||p.y>r.hi.y+step*2)?step*2:horizontal(r,p.x,p.y);
+ if(inserted.second)for(size_t n=0;n<regions.size();++n){
+  const auto& r=regions[n];
+  if(r.hi.x<out.origin.x-step*2||r.lo.x>end.x+step*2||
+     r.hi.y<out.origin.y-step*2||r.lo.y>end.y+step*2)continue;
+  ColumnRegion column;column.region=n;
+  for(int iy=0;iy<out.ny;++iy)for(int ix=0;ix<out.nx;++ix){
+   Vec p=out.point(ix,iy,0);
+   column.distances[iy*out.nx+ix]=(p.x<r.lo.x-step*2||p.x>r.hi.x+step*2||
+      p.y<r.lo.y-step*2||p.y>r.hi.y+step*2)?step*2:horizontal(r,p.x,p.y);
   }
+  columns.push_back(std::move(column));
+ }
+ std::vector<const ColumnRegion*> nearby;
+ for(const auto& column:columns){const auto& r=regions[column.region].map;
+  if(r.ceiling>r.floor&&r.ceiling>=out.origin.z-step*2&&r.floor<=end.z+step*2)nearby.push_back(&column);
+ }
+ for(int iy=0;iy<out.ny;++iy)for(int ix=0;ix<out.nx;++ix){
   for(int iz=0;iz<out.nz;++iz){
    float pz=out.point(ix,iy,iz).z,value=step*2;
    for(size_t i=0;i<nearby.size();++i){
-    const auto& r=nearby[i]->map;
+    const auto& r=regions[nearby[i]->region].map;
     if(r.ceiling<=r.floor)continue;
-    value=std::min(value,std::max(distances[i],std::max(r.floor-pz,pz-r.ceiling)));
+    value=std::min(value,std::max(nearby[i]->distances[iy*out.nx+ix],std::max(r.floor-pz,pz-r.ceiling)));
    }
    value=std::abs(value)<.001f?-.001f:std::clamp(value,-step*2,step*2);
    out.base[out.index(ix,iy,iz)]=out.density[out.index(ix,iy,iz)]=value;

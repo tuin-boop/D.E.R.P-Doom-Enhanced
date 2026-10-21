@@ -257,6 +257,16 @@ boolean PIT_CheckLine (line_t* ld)
     // set openrange, opentop, openbottom
     P_LineOpening (ld);	
 	
+    // A monster can fall beside a ledge with its radius still overlapping
+    // the upper sector. Let it retreat on the low side instead of requiring
+    // a step up onto that ledge for every attempted direction.
+    if(openbottom-tmthing->z>24*FRACUNIT&&P_EscapeSpawnWall(ld)){
+        int side=P_PointOnLineSide(tmthing->x,tmthing->y,ld);
+        sector_t *room=side?ld->backsector:ld->frontsector;
+        if(room->floorheight==lowfloor&&room->floorheight<=tmthing->z
+           &&room->ceilingheight-tmthing->z>=tmthing->height)goto solid_special;
+    }
+
     // adjust floor / ceiling heights
     if (opentop < tmceilingz)
     {
@@ -365,6 +375,7 @@ boolean PIT_CheckThing (mobj_t* thing)
 	
 	// Record the actual actor impact for nearby surface blast damage.
         P_GlobalDigMonsterContact(tmthing,tmx,tmy);
+        SV_MonsterContact(tmthing,thing);
 	// damage / explode
 	damage = ((P_Random()%8)+1)*tmthing->info->damage;
 	P_DamageMobj (thing, tmthing, tmthing->target, damage);
@@ -1592,3 +1603,4 @@ P_ChangeSector
 	
     return nofit;
 }
+

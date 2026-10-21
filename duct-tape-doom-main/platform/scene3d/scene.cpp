@@ -117,6 +117,7 @@ void applySettings() {
     R_DoorMotion=settings.accelerated?doorMotion:nullptr;
     R_CraterCrumble=settings.accelerated?craterCrumble:nullptr;
     R_SurfaceChip=settings.accelerated?surfaceChip:nullptr;
+    R_RubbleImpact=settings.accelerated?rubbleImpact:nullptr;
     R_SolidBulletImpact=settings.accelerated?solidBulletImpact:nullptr;
     R_DoorDamage=nullptr;
     R_WallImpact=settings.accelerated?wallImpact:nullptr;
@@ -154,13 +155,13 @@ void sceneInit(SDL_Window *window) {
 void sceneShutdown() {
     toastyTexture.reset();toastyVisible=0;
     stopRelight();
-    R_AcceleratedView=nullptr;R_BeforeTic=nullptr;R_MuzzleFlash=nullptr;R_WallImpact=nullptr;R_RocketImpact=nullptr;R_BFGHit=nullptr;R_DoorMotion=nullptr;R_DoorDamage=nullptr;R_CraterCrumble=nullptr;R_SurfaceChip=nullptr;R_SolidBulletImpact=nullptr;R_DamageHit=nullptr;R_BloodHit=nullptr;R_PlaneImpact=nullptr;R_ShotPassed=nullptr;r_uncapped=0;v_overlayactive=0;
+    R_AcceleratedView=nullptr;R_BeforeTic=nullptr;R_MuzzleFlash=nullptr;R_WallImpact=nullptr;R_RocketImpact=nullptr;R_BFGHit=nullptr;R_DoorMotion=nullptr;R_DoorDamage=nullptr;R_CraterCrumble=nullptr;R_SurfaceChip=nullptr;R_SolidBulletImpact=nullptr;R_RubbleImpact=nullptr;R_DamageHit=nullptr;R_BloodHit=nullptr;R_PlaneImpact=nullptr;R_ShotPassed=nullptr;r_uncapped=0;v_overlayactive=0;
     lightBlockers.clear();flashes={};oldThings.clear();oldHeights.clear();
     vertexSections.clear();batches.clear();shadowBatches.clear();decalBatches.clear();effectBatches.clear();effectAddBatches.clear();mirrorBatches.clear();particleVertices.clear();
     mistVertices.clear();skyVertices.clear();shaftVertices.clear();heatVertices.clear();
     imagesShutdown();mapShutdown();causticsShutdown();clearSurfaceLights();lightsShutdown();exposureShutdown();
     bakeAtlasShutdown();sunShutdown();lightBakeShutdown();clearStaticGrid();indirectShutdown();
-    bodyMotionShutdown();impactsShutdown();bloodShutdown();splashesShutdown();glassShutdown();shotLightsShutdown();
+    rubbleEmissionVertices.clear();bodyMotionShutdown();impactsShutdown();bloodShutdown();splashesShutdown();glassShutdown();shotLightsShutdown();
 }
 // A new level, or the first after shutdown: each part forgets the last
 // level, then the map and what is built from it at level load.
@@ -593,8 +594,23 @@ extern "C" void I_TestCombatPresentation(void) {
             }
             ++leveltime;
         }
+        settings.deathDirector=settings.deathMotion=0;
+        DeathView off={actor->sprite,actor->frame,actor->angle,false,1,0,{}};
+        if(deathView(*actor,.5f,off)||bodyPose(*actor,.5f,pose))I_Error((char*)"Disabled death effects still draw a cached pose");
+        settings.deathDirector=settings.deathMotion=1;
         P_RemoveMobj(actor);watchBodies();
     }
+    settings.deathDirector=settings.deathFalls=settings.deathMotion=0;
+    mobj_t *flinching=P_SpawnMobj(player->x+96*FRACUNIT,player->y,ONFLOORZ,MT_POSSESSED);
+    watchBodies();P_DamageMobj(flinching,player,player,5);++leveltime;watchBodies();++leveltime;
+    BodyPose pose;
+    if(!bodyPose(*flinching,.5f,pose))I_Error((char*)"Living flinch fixture missing");
+    P_DamageMobj(flinching,player,player,flinching->health+1);
+    if(bodyPose(*flinching,.5f,pose))I_Error((char*)"Living flinch leaked into classic death before watcher");
+    ++leveltime;watchBodies();
+    if(bodyPose(*flinching,.5f,pose))I_Error((char*)"Classic death gained body motion");
+    P_RemoveMobj(flinching);watchBodies();
+    puts("PASS classic deaths ignore cached falls and living hit flinches with death effects off");
     if(!directed||!procedural)I_Error((char*)"Varied/procedural deaths not exercised");
     settings=saved;leveltime=oldtime;bodyMotionShutdown();
     printf("Combat presentation: real monster damage, flinches, varied deaths and procedural geometry passed.\n");

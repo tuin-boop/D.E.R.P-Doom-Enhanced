@@ -46,6 +46,34 @@ int main(){try{
    }
   check(std::abs(area-length(cross(b-a,c-a)))<.005f,"Skin partition lost surface coverage");
  }
+ // Skin clipping and the crater mesh must share exactly the same zero set,
+ // including deep cuts and almost-zero boundary samples.
+ {
+  Volume v;v.create(4,4,4,4,{0,0,0});
+  for(size_t i=0;i<v.density.size();++i)v.density[i]=std::sin(float(i)*1.73f)*32;
+  v.density[0]=0;v.density[1]=.003f;v.density[2]=-.004f;
+  v.rebuild();size_t checked=0;
+  for(const auto& chunk:v.chunks)for(const auto& t:chunk.triangles){
+   for(Vec p:{t.a,t.b,t.c,t.a*.2f+t.b*.3f+t.c*.5f})
+    check(std::abs(v.field(p))<.0002f,"Crater mesh differs from the skin clipping field");
+   ++checked;
+  }
+  check(checked>0,"Mesh/skin regression had no surface");
+ }
+ // Shallow damage still clips the map skin: its replacement faces must
+ // not be discarded by a larger, independent mesh damage tolerance.
+ for(float depth:{.005f,.0001f}){
+  Volume v;v.create(2,2,2,4,{4600,-4200,-220});
+  for(int z=0;z<2;++z)for(int y=0;y<2;++y)for(int x=0;x<2;++x){
+   auto i=v.index(x,y,z);v.base[i]=float(x)*4-2;v.density[i]=v.base[i]-depth;
+  }
+  v.rebuild();size_t checked=0;
+  for(const auto& chunk:v.chunks)for(const auto& t:chunk.triangles){
+   check(t.damaged==(depth>excavationEpsilon),"Shallow crater replacement disagrees with skin removal tolerance");
+   ++checked;
+  }
+  check(checked>0,"Shallow damage regression had no surface");
+ }
  MapWorld world;world.reset(source());Hit hit;
  check(world.ray({0,0,40},{1,0,0},200,hit)&&hit.point.x<60,"Original wall missing");
  check(!world.fits({64,0,1},12,56),"Original wall admits player");
@@ -75,6 +103,11 @@ int main(){try{
  loaded.tile({-2,0,0});seams(loaded);
  MapSource doorSource;auto door=room(2,56,72);door.ceiling=0;door.movingCeiling=true;
  doorSource.reset({room(0,-128,56),room(1,72,256),door});
+ MapWorld untouched;untouched.reset(doorSource);
+ untouched.tile({1,0,0});untouched.heights(2,0,64);
+ check(untouched.tile({1,0,0}).volume.field({64,16,32})<0,"Lazy door tile retained closed collision");
+ untouched.heights(2,48,64);
+ check(untouched.tile({1,0,0}).volume.field({64,16,32})>0,"Lazy lift tile lost raised-floor collision");
  MapWorld moving;moving.reset(doorSource);
  check(moving.blast({64,0,32},24,2,1,0),"Door impact failed");
  check(moving.sample({64,0,32})<0,"Door hole missing");

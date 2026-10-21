@@ -6,6 +6,7 @@
 // flashlight silhouettes reuse a thing's sprite.
 layout(set=2,binding=0) uniform sampler2D image;
 layout(location=0) out vec4 outColor;
+#include "rock_heat.glsl"
 float shadowCoverage(vec2 uv) {
     vec2 size=vec2(textureSize(image,0));
     if(any(lessThan(uv,vec2(0)))||any(greaterThanEqual(uv,size))) return 0.0;
@@ -13,6 +14,7 @@ float shadowCoverage(vec2 uv) {
 }
 void main() {
 #ifdef DECAL
+    if((vMode&2048u)!=0u){outColor=rockHeat();return;}
     float alpha=shadowCoverage(vUV);
     // MODE_HARD_SILHOUETTE: hard-edged silhouettes keep the sprite's pixel outline.
     // MODE_STIPPLED: as the flashlight's other shadows (flashStipple in

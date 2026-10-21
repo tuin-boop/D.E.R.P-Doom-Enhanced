@@ -4,6 +4,7 @@
 #include <ostream>
 #include <cstring>
 #include <set>
+
 namespace lab {
 static constexpr float extent=MapSource::tileCells*MapSource::step;
 TileKey MapWorld::key(Vec p){return {int(std::floor(p.x/extent)),int(std::floor(p.y/extent)),int(std::floor(p.z/extent))};}
@@ -21,22 +22,35 @@ bool MapWorld::intersects(TileKey k,Vec c,float r){
   c.y+r>=k[1]*extent&&c.y-r<=(k[1]+1)*extent&&
   c.z+r>=k[2]*extent&&c.z-r<=(k[2]+1)*extent;
 }
-static float cutValue(Vec p,Vec c,float radius){
+static float cutValue(Vec p,Vec c,float radius,float phase){
  // Noise follows the cut's local coordinates, including when a door moves.
  Vec d=p-c;
- float fractured=radius*(1+.055f*std::sin(d.x*.31f+d.z*.27f)*std::cos(d.y*.29f-d.z*.17f));
+ // Broad asymmetric lobes break the repeated bowl silhouette; fine fracture
+ // stays inside the existing 1.06 conservative influence bounds. The phase
+ // comes from the saved cut center, so movement and reload remain stable.
+ float broad=std::sin((d.x*.8f+d.y*.57f+d.z*.43f)/std::max(4.f,radius)*3.f+phase);
+ float fine=std::sin(d.x*.31f+d.z*.27f+phase)*std::cos(d.y*.29f-d.z*.17f-phase);
+ float fractured=radius*(.95f+.06f*broad+.04f*fine);
  return length(d)-fractured;
 }
 float MapWorld::cutValue(Vec p,const MapCut& c)const{
  Vec shifted=center(c),origin=c.capOrigin+(shifted-c.center);
  Vec d=p-shifted;
  d=d-c.capNormal*(dot(d,c.capNormal)*(1-1/c.stretch));
- return std::max(lab::cutValue(d,{},c.radius),dot(p-origin,c.capNormal)-c.capDepth);
+ return std::max(lab::cutValue(d,{},c.radius,c.center.x*.037f+c.center.y*.053f+c.center.z*.071f),dot(p-origin,c.capNormal)-c.capDepth);
+}
+// Blend only existing excavations, never the original solid boundary.
+// A compact two-unit join removes the ridges between overlapping bowls.
+static float joinedCut(float previous,float next,float base){
+ if(previous>=base-.01f)return std::min(previous,next);
+ constexpr float width=2.f;
+ float h=std::max(0.f,1.f-std::abs(previous-next)/width);
+ return std::min(previous,next)-h*h*width*.25f;
 }
 float MapWorld::sample(Vec p)const{
  float value=source.sample(p);
  for(const auto& c:cuts)if(length(p-center(c))<c.radius*std::max(1.f,c.stretch)*1.06f+MapSource::step*2&&source.damageAllowed(p,c.sector,c.plane)&&source.depth(p)<=c.maxDepth)
-  value=std::min(value,cutValue(p,c));
+  value=joinedCut(value,cutValue(p,c),source.sample(p));
  return value;
 }
 bool MapWorld::edited(Vec p)const{
@@ -52,7 +66,7 @@ float MapWorld::removal(Vec p)const{
  float base=v.field(p,true),after=v.field(p);
  // Keep only a numerical lip. A .03 field tolerance expands into visible
  // strips on shallow gradients around unchanged grid nodes.
- return std::min(base-after-.00025f,-after-.00025f);
+ return std::min(base-after-excavationEpsilon,-after-excavationEpsilon);
 }
 uint64_t MapWorld::supportStamp(Vec p,float radius)const{
  radius+=MapSource::step*2;
@@ -73,7 +87,7 @@ uint64_t MapWorld::skinStamp(Vec lo,Vec hi,bool* mayRemove)const{
   Vec p{float(x)*4,float(y)*4,float(z)*4};auto k=key(p);
   if(k!=previous){auto it=cache.find(k);volume=it!=cache.end()&&it->second.edited?&it->second.volume:nullptr;previous=k;}
   uint32_t a=0,b=0;
-  if(volume){auto i=volume->index(x-k[0]*16,y-k[1]*16,z-k[2]*16);std::memcpy(&a,&volume->base[i],4);std::memcpy(&b,&volume->density[i],4);changed|=volume->density[i]<volume->base[i]-.00025f;air|=volume->density[i]<-.00025f;}
+  if(volume){auto i=volume->index(x-k[0]*16,y-k[1]*16,z-k[2]*16);std::memcpy(&a,&volume->base[i],4);std::memcpy(&b,&volume->density[i],4);changed|=volume->density[i]<volume->base[i]-excavationEpsilon;air|=volume->density[i]<-excavationEpsilon;}
   stamp=(stamp^a)*1099511628211ULL;stamp=(stamp^b)*1099511628211ULL;
  }
  if(mayRemove)*mayRemove=changed&&air;
@@ -119,7 +133,7 @@ void MapWorld::update(TileKey k,WorldTile& tile,bool incremental){
   for(int z=z0;z<=z1;++z)for(int y=y0;y<=y1;++y)for(int x=x0;x<=x1;++x){
    size_t i=next.index(x,y,z);
    Vec p=next.point(x,y,z);
-   float value=cutValue(p,cut);
+   float value=joinedCut(next.density[i],cutValue(p,cut),next.base[i]);
    if(value>=next.density[i])continue;
    if(allowed[i]<0)allowed[i]=source.damageAllowed(p,cut.sector,cut.plane)?1:0;
    if(!allowed[i])continue;
@@ -155,6 +169,10 @@ bool MapWorld::blast(Vec c,float r,int sector,int plane,float anchor,Vec capOrig
  // The brush centre may already be beyond a thin door. Ownership and
  // protected surfaces are checked per sample, not at the brush centre.
  if(!std::isfinite(capDepth)||!std::isfinite(maxDepth)||maxDepth<=0||maxDepth>4096||!std::isfinite(stretch)||stretch<.01f||stretch>5)return false;
+ // Reapplying an identical brush must not deepen a smoothed join.
+ for(const auto& old:cuts)if(old.radius==r&&old.sector==sector&&old.plane==plane&&old.anchor==anchor&&
+     old.capDepth==capDepth&&old.maxDepth==maxDepth&&old.stretch==stretch&&
+     length(old.center-c)<.0001f&&length(old.capOrigin-capOrigin)<.0001f&&length(old.capNormal-capNormal)<.0001f)return false;
  cuts.push_back({c,r,sector,plane,anchor,capOrigin,capNormal,capDepth,maxDepth,stretch});
  unsigned beforeRevision=nextRevision;
  // Include a narrow-band collar: shared corner/edge nodes get identical
@@ -179,8 +197,8 @@ bool MapWorld::heights(int sector,float floor,float ceiling){
  for(int y=firstColumn[1];y<=lastColumn[1];++y)for(int x=firstColumn[0];x<=lastColumn[0];++x)columns[{x,y}]=planeRevision;
  // A changed sector only affects tiles overlapping its XY footprint. Keep
  // tiles elsewhere (and their render caches) untouched while a door moves.
- for(auto& entry:cache){
-  auto k=entry.first;
+ for(auto it=cache.begin();it!=cache.end();){
+  auto current=it++;auto& entry=*current;auto k=entry.first;
   if((k[0]+1)*extent<lo.x-MapSource::step*2||k[0]*extent>hi.x+MapSource::step*2||
      (k[1]+1)*extent<lo.y-MapSource::step*2||k[1]*extent>hi.y+MapSource::step*2)continue;
   bool affected=false;
@@ -194,6 +212,10 @@ bool MapWorld::heights(int sector,float floor,float ceiling){
    if(intersects(k,now,radius)||intersects(k,old,radius))affected=true;
   }
   if(!affected)continue;
+  // Undamaged collision tiles have no rendered crater to keep up to date.
+  // Invalidate them lazily instead of remeshing the whole lift footprint.
+  // A later support/ray query samples the new sector heights on demand.
+  if(!entry.second.edited){cache.erase(current);continue;}
   update(k,entry.second);
  }
  for(const auto& cut:cuts)if(cut.sector==sector&&previous[cut.plane]!=planes[sector][cut.plane]){

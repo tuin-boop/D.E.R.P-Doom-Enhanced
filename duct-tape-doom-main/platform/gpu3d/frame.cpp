@@ -319,6 +319,13 @@ static void drawBloom(SDL_GPUCommandBuffer *render,const FrameView &view,const U
     SDL_BindGPUFragmentSamplers(glowPass,0,&solid,1);SDL_BindGPUFragmentSamplers(glowPass,2,&solid,1);
     float noBlend[4]={};SDL_PushGPUFragmentUniformData(render,0,noBlend,sizeof(noBlend));
     drawVertices(glowPass,skyVertices);
+    // Use the completed world depth to keep rubble emission behind intact
+    // walls. Reuse the existing HDR blur, with no extra full-screen pass.
+    if(!rubbleEmissionVertices.empty()){
+        SDL_BindGPUGraphicsPipeline(glowPass,rubbleEmissionPipeline);
+        drawVertices(glowPass,rubbleEmissionVertices);
+        SDL_BindGPUGraphicsPipeline(glowPass,emissionPipeline);
+    }
     // The weapon hides glow behind it too; it is drawn over the view in
     // the HUD's frame, so the glow from lamps behind it would otherwise
     // show through it.
@@ -330,15 +337,24 @@ static void drawBloom(SDL_GPUCommandBuffer *render,const FrameView &view,const U
         }
     }
     SDL_EndGPURenderPass(glowPass);
-    for(int axis=0;axis<2;++axis) {
+    // Fine emissive creases need a continuous prefilter before the wide halo.
+    // Only pay for it while rubble heat is visible.
+    const int blurPasses=rubbleEmissionVertices.empty()?2:6;
+    for(int pass=0;pass<blurPasses;++pass) {
+        int axis=pass&1;
         SDL_GPUColorTargetInfo blur={};
         blur.texture=axis?bloomTexture:bloomScratch;blur.load_op=SDL_GPU_LOADOP_DONT_CARE;blur.store_op=SDL_GPU_STOREOP_STORE;
         SDL_GPURenderPass *blurPass=SDL_BeginGPURenderPass(render,&blur,1,nullptr);
         SDL_BindGPUGraphicsPipeline(blurPass,blurPipeline);
-        SDL_GPUTextureSamplerBinding source={axis?bloomScratch:emissionTexture,linearClamp};
+        SDL_GPUTextureSamplerBinding source={axis?bloomScratch:(pass?bloomTexture:emissionTexture),linearClamp};
         SDL_BindGPUFragmentSamplers(blurPass,0,&source,1);
         // Radius scales with resolution, retaining a similar halo at 50–100%.
-        float direction[4]={axis?0:0.0035f,axis?0.0056f:0,0,0};
+        float dx=0.0035f,dy=0.0056f;
+        if(blurPasses>2 && pass<4){
+            float texels=pass<2?1.0f:2.0f;
+            dx=texels/bw;dy=texels/bh;
+        }
+        float direction[4]={axis?0:dx,axis?dy:0,0,0};
         SDL_PushGPUFragmentUniformData(render,0,direction,sizeof(direction));
         SDL_DrawGPUPrimitives(blurPass,3,1,0,0);
         SDL_EndGPURenderPass(blurPass);

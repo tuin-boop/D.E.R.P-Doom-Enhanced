@@ -33,10 +33,23 @@ int main(){try{
  check(source.sample({32,0,40})<0,"Raised door did not open");
  source.heights(1,24,128);
  check(source.sample({32,0,12})>0&&source.sample({32,0,40})<0,"Lift height ignored");
+ // Reused XY columns must match fresh sampling through closure/reopening,
+ // lift motion, negative Z tiles, and topology replacement.
+ for(float floor:{0.f,16.f,64.f,-32.f})for(float ceiling:{0.f,48.f,128.f}){
+  source.heights(1,floor,ceiling);
+  for(int tz:{-1,0,1}){
+   auto cached=source.tile(0,0,tz,false);
+   MapSource fresh;fresh.reset(source.topology());auto expected=fresh.tile(0,0,tz,false);
+   check(cached.density==expected.density,"Cached outline changed moving-sector density");
+  }
+ }
  auto ring=box(0,-64,-64,64,64,0,128);
  loop(ring,{{-16,-16,0},{16,-16,0},{16,16,0},{-16,16,0}});
  source.reset({ring});
  check(source.sample({0,0,40})>0&&source.sample({32,0,40})<0,"Sector hole incorrectly filled with air");
+ auto resetTile=source.tile(0,0,0,false);
+ for(int z=0;z<17;++z)for(int y=0;y<17;++y)for(int x=0;x<17;++x)
+  check(resetTile.density[resetTile.index(x,y,z)]==source.sample(resetTile.point(x,y,z)),"Outline cache survived topology reset");
  MapRegion concave;concave.sector=2;concave.floor=-32;concave.ceiling=100;
  loop(concave,{{-64,-64,0},{64,-64,0},{64,0,0},{0,0,0},{0,64,0},{-64,64,0}});
  source.reset({concave});

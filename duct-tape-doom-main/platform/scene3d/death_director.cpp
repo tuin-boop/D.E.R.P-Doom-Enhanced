@@ -87,6 +87,7 @@ static const DeathArt &deathArt(int first,const mobjinfo_t &info) {
     return art;
 }
 void startDeath(const mobj_t &thing,float dx,float dy,float speed,float side,float high,bool gib,const mobj_t *attack,float hitZ,float hitU) {
+    if(!settings.deathDirector)return;
     // A rigged monster falls procedurally instead (death_falls.cpp).
     if(!gib&&startFall(thing,speed,high,side,hitZ,hitU))return;
     const mobjinfo_t &info=*thing.info;
@@ -169,6 +170,7 @@ void forgetDeath(const mobj_t *thing) {deaths.erase(thing);forgetFall(thing);}
 void deathsShutdown() {deaths.clear();arts.clear();attackPace.clear();attackTic=-1;fallsShutdown();}
 
 bool deathView(const mobj_t &thing,float fraction,DeathView &view) {
+    if(!settings.deathDirector)return false;
     if(settings.deathFalls&&fallView(thing,fraction,view))return true;
     auto found=deaths.find(&thing);
     if(found==deaths.end()||thing.health>0||!(thing.flags&MF_CORPSE)||!thing.state)return false;

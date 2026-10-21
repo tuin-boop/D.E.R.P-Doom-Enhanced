@@ -179,26 +179,33 @@ static void buildSolidMapMesh(){
    cache.revision=tile.revision;cache.vertices.clear();
    for(const auto& chunk:tile.volume.chunks)for(const auto& triangle:chunk.triangles){
     if(!triangle.damaged)continue;
-    // Split at the original skin: concrete belongs only to newly exposed
-    // material, never to the intact grid cells surrounding the crater.
-    std::vector<lab::Vec> polygon;lab::Vec previous=triangle.c;
-    // End inside the skin's retained numerical lip, so rounding cannot
-    // expose a gap between the two independently generated surfaces.
-    float pd=tile.volume.field(previous,true)-.00001f;
-    for(lab::Vec current:{triangle.a,triangle.b,triangle.c}){
-     float cd=tile.volume.field(current,true)-.00001f;
-     if((pd>=0)!=(cd>=0))polygon.push_back(previous+(current-previous)*(pd/(pd-cd)));
-     if(cd>=0)polygon.push_back(current);previous=current;pd=cd;
-    }
-    if(polygon.size()<3)continue;
+    // The mesh is the zero set of the excavated field, whose samples never
+    // exceed the original field. Its triangles therefore already lie inside
+    // the original solid. Re-clipping near-zero rim vertices at large map
+    // coordinates amplified float error into holes on shallow, slanted cuts.
+    // Drop wholly unchanged faces; retain complete triangles at crater rims.
+    float exposed=std::max({tile.volume.field(triangle.a,true),
+                           tile.volume.field(triangle.b,true),tile.volume.field(triangle.c,true)});
+    if(exposed<=lab::excavationEpsilon)continue;
+    std::vector<lab::Vec> polygon{triangle.a,triangle.b,triangle.c};
     auto midpoint=(triangle.a+triangle.b+triangle.c)*(1.f/3);
     const sector_t* owning=R_PointInSubsector((fixed_t)(midpoint.x*FRACUNIT),(fixed_t)(midpoint.y*FRACUNIT))->sector;
+    // Orthonormal face coordinates preserve texel size even on steep cuts.
+    // Dominant-axis projection compressed the texture into bands there.
+    auto normal=lab::normalized(triangle.normal);
+    lab::Vec reference=std::abs(normal.z)>.75f?lab::Vec{1,0,0}:lab::Vec{0,0,1};
+    auto texU=lab::normalized(lab::cross(reference,normal));
+    auto texV=lab::cross(normal,texU);
     auto vertex=[&](lab::Vec p){
-     Vertex v{};v.x=p.x;v.y=p.y;v.z=p.z;v.mode=sectorMode(owning);
-     bool flat=std::abs(triangle.normal.z)>std::max(std::abs(triangle.normal.x),std::abs(triangle.normal.y));
-     v.u=flat?p.x:std::abs(triangle.normal.x)>std::abs(triangle.normal.y)?p.y:p.x;
-     v.v=flat?-p.y:-p.z;
-     float facet=.7f+.22f*std::abs(triangle.normal.z)+.08f*std::abs(triangle.normal.x);
+     Vertex v{};v.x=p.x;v.y=p.y;v.z=p.z;v.mode=sectorMode(owning)|MODE_ROCK;
+     auto field=[&](lab::Vec q){return tile.volume.field(q,false);};
+     lab::Vec gradient={field(p+lab::Vec{1,0,0})-field(p-lab::Vec{1,0,0}),
+         field(p+lab::Vec{0,1,0})-field(p-lab::Vec{0,1,0}),
+         field(p+lab::Vec{0,0,1})-field(p-lab::Vec{0,0,1})};
+     auto smooth=lab::length(gradient)>.001f?lab::normalized(gradient):normal;
+     v.red=std::abs(smooth.x);v.green=std::abs(smooth.y);v.blue=std::abs(smooth.z);
+     v.u=lab::dot(p,texU);v.v=lab::dot(p,texV);
+     float facet=.82f+.10f*std::abs(smooth.z);
      v.light=facet*(.58f+.42f*std::min(1.f,std::max(0.f,tile.volume.field(p,true))/1.5f));
      return v;
     };
@@ -246,3 +253,4 @@ static void buildSolidMapMesh(){
   }
  if(profileMesh&&gametic==50){double scale=1000.0/SDL_GetPerformanceFrequency();printf("MESH boxes %.3f skins %.3f tiles %.3f append %.3f ms\n",(boxesEnd-meshStart)*scale,(skinsEnd-boxesEnd)*scale,(tilesEnd-skinsEnd)*scale,(SDL_GetPerformanceCounter()-tilesEnd)*scale);}
 }
+

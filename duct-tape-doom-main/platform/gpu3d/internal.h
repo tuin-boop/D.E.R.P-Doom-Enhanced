@@ -50,7 +50,7 @@ void updatePaletteLUT(const unsigned *palette);
 extern SDL_GPUSampleCount sampleCount;
 extern SDL_GPUGraphicsPipeline *opaquePipeline,*skyPipeline,*skySurfacePipeline,*reflectSkySurfacePipeline,*worldPipeline,*shadowPipeline,*decalPipeline,*effectAddPipeline,*particlePipeline,*heatPipeline,
     *weaponPipeline,*weaponAddPipeline,*hudPipeline,*solidPipeline,*mistPipeline,*shaftPipeline,*overlayWeaponPipeline,*overlayWeaponAddPipeline,*overlayHudPipeline,*overlaySolidPipeline,
-    *reflectOpaquePipeline,*reflectSkyPipeline,*reflectWorldPipeline,*emissionPipeline,*blurPipeline,*presentPipeline,*depthPipeline,*prepassPipeline,*coveragePipeline,*cutoutPipeline,
+    *reflectOpaquePipeline,*reflectSkyPipeline,*reflectWorldPipeline,*emissionPipeline,*rubbleEmissionPipeline,*blurPipeline,*presentPipeline,*depthPipeline,*prepassPipeline,*coveragePipeline,*cutoutPipeline,
     *settingsPipeline,*glassPipeline,*reflectPrepassPipeline;
 // Render targets at the render resolution (width x height); bloom at half.
 extern SDL_GPUTexture *multisampleTexture,*colorTexture,*depthTexture,*sceneDepth,*emissionTexture,*emissionDepth,*bloomScratch,*bloomTexture;

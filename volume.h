@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <iosfwd>
 namespace lab {
+// Shared by wall clipping, cache invalidation, and replacement mesh selection.
+inline constexpr float excavationEpsilon=.00025f;
 struct Vec {
  float x=0,y=0,z=0;
  Vec operator+(Vec b)const{return {x+b.x,y+b.y,z+b.z};}

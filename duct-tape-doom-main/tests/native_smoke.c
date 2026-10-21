@@ -1122,6 +1122,37 @@ void I_TestFrame(void)
         puts("PASS ordinary map: split linedef destruction, bidirectional shots and native player walking.");
         capture=gametic+4;return;
     }
+    if(getenv("DOOM_TEST_DEMONSTUCK")){
+        static int start=-1,last=-1;static mobj_t *trapped=NULL;static fixed_t originalX,originalY;
+        if(gamestate!=GS_LEVEL||!players[0].mo)return;
+        if(start<0){start=gametic;players[0].cheats|=CF_GODMODE;}
+        int elapsed=gametic-start;
+        if(last!=elapsed&&elapsed%35==0){last=elapsed;
+            for(thinker_t *th=thinkercap.next;th!=&thinkercap;th=th->next){
+                if(th->function.acp1!=(actionf_p1)P_MobjThinker)continue;
+                mobj_t *m=(mobj_t*)th;
+                if(!trapped&&m->type==MT_SERGEANT&&m->health>0&&m->z<0){trapped=m;originalX=m->x;originalY=m->y;}
+                if(m->type==MT_SERGEANT&&m->health>0)printf("DEMON %d xyz %.2f %.2f %.2f floor %.2f target %d move %d\n",elapsed,m->x/(float)FRACUNIT,m->y/(float)FRACUNIT,m->z/(float)FRACUNIT,m->floorz/(float)FRACUNIT,m->target!=NULL,m->movedir);
+            }
+        }
+        if(elapsed==20){
+            extern fixed_t tmfloorz,tmceilingz,tmdropoffz;
+            for(thinker_t *th=thinkercap.next;th!=&thinkercap;th=th->next){
+                if(th->function.acp1!=(actionf_p1)P_MobjThinker)continue;
+                mobj_t *m=(mobj_t*)th;if(m->type!=MT_SERGEANT||m->health<=0||m->z>=0)continue;
+                for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){
+                    int ok=P_CheckPosition(m,m->x+dx*8*FRACUNIT,m->y+dy*8*FRACUNIT);
+                    printf("PROBE %d %d clear %d floor %.1f ceiling %.1f drop %.1f radius %.1f\n",dx,dy,ok,tmfloorz/(float)FRACUNIT,tmceilingz/(float)FRACUNIT,tmdropoffz/(float)FRACUNIT,m->radius/(float)FRACUNIT);
+                }
+            }
+            I_Render3DScreenshotTo("demonstuck-before.png");
+        }
+        if(elapsed>=210){
+            if(!trapped||P_AproxDistance(trapped->x-originalX,trapped->y-originalY)<30*FRACUNIT)I_Error("Demon remained trapped at lower ledge");
+            if(trapped->z!=-32*FRACUNIT)I_Error("Demon escaped by climbing the tall ledge");
+            puts("PASS saved demon retreats from ledge and moves on the lower floor");
+            I_Render3DScreenshotTo("demonstuck-after.png");I_Quit();}return;
+    }
     if(getenv("DOOM_TEST_SOLID_PUFF")){
         if(gamestate!=GS_LEVEL||gametic<25)return;
         extern void I_TestImpactOptions(void);I_TestImpactOptions();I_Quit();return;
@@ -1155,25 +1186,98 @@ void I_TestFrame(void)
         if(elapsed>=(getenv("DOOM_TEST_LAG5_LONG")?500:250)){puts("PASS lag5 walking playback");I_Quit();}
         return;
     }
+    if(getenv("DOOM_TEST_ACTOR_GROUND")){
+        extern int p_breakablewalls;
+        if(gamestate!=GS_LEVEL||!players[0].mo||gametic<12)return;
+        mobj_t victim=*players[0].mo,projectile={0},shooter={0};
+        int types[]={MT_ROCKET,MT_BFG,MT_PLASMA,MT_TROOPSHOT,MT_BRUISERSHOT,MT_HEADSHOT};
+        p_breakablewalls=p_player_surface_damage=p_monster_surface_damage=1;
+        p_throughwalls=p_breachdoors=1;p_wall_damage=100;
+        shooter.type=MT_CYBORG;projectile.target=&shooter;
+        for(int i=0;i<6;++i){
+            float hit[6];int owner;
+            if(SV_Trace(victim.x/(float)FRACUNIT,victim.y/(float)FRACUNIT,
+                players[0].mo->z/(float)FRACUNIT+32,0,0,-160,hit,&owner)>=1)
+                I_Error("Actor impact fixture has no supporting floor");
+            victim.z=(fixed_t)(hit[2]*FRACUNIT);projectile.type=types[i];
+            projectile.flags=MF_MISSILE;projectile.x=victim.x;projectile.y=victim.y;
+            projectile.z=victim.z+40*FRACUNIT;
+            int before=SV_SaveSize();
+            SV_MonsterContact(&projectile,&victim);
+            if(!SV_Explode(&projectile)||SV_SaveSize()<=before)
+                I_Error("Grounded actor hit failed to excavate for missile %d",types[i]);
+            int after=SV_SaveSize();SV_Blast(&projectile,128);
+            if(SV_SaveSize()!=after)I_Error("Actor impact duplicated explosion excavation");
+        }
+        int before=SV_SaveSize();victim.z+=96*FRACUNIT;
+        if(SV_ActorGroundImpact(&projectile,&victim)||SV_SaveSize()!=before)
+            I_Error("Airborne actor excavated a distant floor");
+        victim.z-=96*FRACUNIT;p_monster_surface_damage=0;
+        if(SV_ActorGroundImpact(&projectile,&victim)||SV_SaveSize()!=before)
+            I_Error("Monster surface damage toggle ignored");
+        projectile.target=players[0].mo;p_player_surface_damage=0;
+        if(SV_ActorGroundImpact(&projectile,&victim)||SV_SaveSize()!=before)
+            I_Error("Player surface damage toggle ignored");
+        // Exercise PIT_CheckThing through a real rocket/Spider collision too.
+        p_player_surface_damage=p_monster_surface_damage=1;
+        float floorHit[6];int floorOwner;
+        if(SV_Trace(victim.x/(float)FRACUNIT,victim.y/(float)FRACUNIT,
+            players[0].mo->z/(float)FRACUNIT+32,0,0,-160,floorHit,&floorOwner)>=1)
+            I_Error("Spider fixture has no floor");
+        players[0].mo->flags&=~(MF_SOLID|MF_SHOOTABLE);
+        mobj_t *spider=P_SpawnMobj(victim.x,victim.y,(fixed_t)(floorHit[2]*FRACUNIT),MT_SPIDER);
+        mobj_t *rocket=P_SpawnMobj(victim.x,victim.y,spider->z+32*FRACUNIT,MT_ROCKET);
+        rocket->target=&shooter;rocket->momx=20*FRACUNIT;
+        int health=spider->health;before=SV_SaveSize();
+        if(P_TryMove(rocket,spider->x,spider->y)||spider->health>=health||SV_SaveSize()<=before)
+            I_Error("Cyberdemon rocket hitting Spider did not damage its supporting floor");
+        int afterContact=SV_SaveSize();
+        P_ExplodeMissile(rocket);
+        if(SV_SaveSize()!=afterContact)I_Error("Real rocket collision excavated twice");
+        puts("PASS actor ground impacts: rocket, BFG, plasma and monster fireballs; airborne exclusion, toggles, no duplicate blast");
+        I_Quit();return;
+    }
+    if(getenv("DOOM_TEST_HOLE")){
+        static int started=-1;static angle_t original;
+        if(gamestate!=GS_LEVEL||!players[0].mo)return;
+        mobj_t *m=players[0].mo;
+        if(started<0){started=gametic;original=m->angle;players[0].cheats|=CF_GODMODE;
+            printf("HOLE position %.2f %.2f %.2f angle %u\n",m->x/(float)FRACUNIT,m->y/(float)FRACUNIT,m->z/(float)FRACUNIT,m->angle);}
+        int elapsed=gametic-started;
+        if(elapsed==15)I_Render3DScreenshotTo("hole-front.png");
+        if(elapsed==25)m->angle=original-ANG45/3;
+        if(elapsed==30)I_Render3DScreenshotTo("hole-left.png");
+        if(elapsed==40)m->angle=original+ANG45/3;
+        if(elapsed==45)I_Render3DScreenshotTo("hole-right.png");
+        if(elapsed==55){puts("PASS HOLE save inspection playback");I_Quit();}
+        return;
+    }
     if(getenv("DOOM_TEST_LAG3")){
         static int started=-1,lastShot=-1;static angle_t originalAngle;
         if(gamestate!=GS_LEVEL||!players[0].mo)return;
         player_t* p=&players[0];
         if(started<0){started=gametic;p->cheats|=CF_GODMODE;
-            p->weaponowned[wp_plasma]=true;p->ammo[am_cell]=600;
-            p->readyweapon=wp_plasma;p->pendingweapon=wp_nochange;P_SetPsprite(p,ps_weapon,S_PLASMA);
+            weapontype_t weapon=getenv("DOOM_TEST_RUBBLE_ROCKET")?wp_missile:getenv("DOOM_TEST_RUBBLE_BFG")?wp_bfg:wp_plasma;
+            p->weaponowned[weapon]=true;p->ammo[am_cell]=600;p->ammo[am_misl]=60;
+            p->readyweapon=weapon;p->pendingweapon=wp_nochange;P_SetPsprite(p,ps_weapon,weaponinfo[weapon].readystate);
             originalAngle=p->mo->angle;
             freeaim=true;tourpitch=-.3f;puts("LAG3 concrete plasma");}
         int elapsed=gametic-started;
         if(getenv("DOOM_TEST_SOLID_CAPTURE")&&elapsed==20)I_Render3DScreenshotTo("lag3-before.png");
-        if(elapsed>=35&&elapsed<185&&elapsed/3!=lastShot){
+        if(elapsed>=35&&elapsed<(getenv("DOOM_TEST_RUBBLE")?36:185)&&elapsed/3!=lastShot){
             if(getenv("DOOM_TEST_SOLID_SWEEP")){
                 tourpitch=-.3f+.10f*sinf(elapsed*.17f);
                 p->mo->angle=originalAngle+(int)(sinf(elapsed*.11f)*(ANG45/12));
             }
             P_FireWeapon(p);lastShot=elapsed/3;
         }
+        if(getenv("DOOM_TEST_RUBBLE_CLOSE")&&elapsed==60){
+            double angle=p->mo->angle*(6.283185307179586/4294967296.0);
+            P_TryMove(p->mo,p->mo->x+(fixed_t)(40*FRACUNIT*cos(angle)),p->mo->y+(fixed_t)(40*FRACUNIT*sin(angle)));
+        }
         if(getenv("DOOM_TEST_SOLID_CAPTURE")&&elapsed==240)I_Render3DScreenshotTo("lag3-after.png");
+        if(getenv("DOOM_TEST_RUBBLE")&&elapsed==110)I_Render3DScreenshotTo("rubble-cooling.png");
+        if(getenv("DOOM_TEST_RUBBLE")&&elapsed==(getenv("DOOM_TEST_RUBBLE_BFG")?100:65))I_Render3DScreenshotTo(getenv("DOOM_TEST_RUBBLE_BFG")?"rubble-bfg-live.png":getenv("DOOM_TEST_RUBBLE_ROCKET")?"rubble-rocket-live.png":"rubble-plasma-live.png");
         if(elapsed>=260){puts("PASS lag3 plasma playback");I_Quit();}
         return;
     }

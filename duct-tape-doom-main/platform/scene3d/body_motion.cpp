@@ -144,6 +144,7 @@ void watchBodies() {
                 if(h.count>0) {z=h.z/h.count;hdx=h.dx;hdy=h.dy;side=h.side/h.count;known=true;}
                 else if(h.missile) {z=h.missileZ;side=h.missileSide;known=true;}
             }
+            if(died)impulses.erase(thing); // Living hit flinches must not carry into death.
             if(!died||settings.deathMotion)addImpulse(*thing,body,z,known,hdx,hdy,died);
             if(died&&settings.deathDirector) {
                 float dx,dy,speed;pushOf(*thing,body,hdx,hdy,dx,dy,speed);
@@ -183,12 +184,14 @@ static float kick(float t,float rate,float damping) {
 }
 bool bodyPose(const mobj_t &thing,float fraction,BodyPose &pose) {
     pose={};
+    const bool dead=thing.health<=0||(thing.flags&MF_CORPSE);
+    if(dead&&!settings.deathMotion)return false;
     if(thing.tics==-1&&(thing.flags&MF_CORPSE))return false;
     auto found=impulses.find(&thing);
     if(found==impulses.end())return false;
     bool any=false;
     for(const Impulse &p:found->second) {
-        if(p.death?!settings.deathMotion:!settings.hitFlinch)continue;
+        if((dead&&!p.death)||(p.death?!settings.deathMotion:!settings.hitFlinch))continue;
         float t=leveltime+fraction-1-p.start;
         if(t<0||t>p.duration)continue;
         float fade=1;

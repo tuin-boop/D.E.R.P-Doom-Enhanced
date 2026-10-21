@@ -62,8 +62,9 @@ void Volume::rebuild(){
  for(int iz=0;iz<cz;++iz)for(int iy=0;iy<cy;++iy)for(int ix=0;ix<cx;++ix){
   Chunk &chunk=chunks[(iz*cy+iy)*cx+ix];if(!chunk.dirty)continue;chunk.dirty=false;chunk.triangles.clear();++chunk.revision;++lastRebuilt;
   for(int z=iz*cells;z<std::min(nz-1,(iz+1)*cells);++z)for(int y=iy*cells;y<std::min(ny-1,(iy+1)*cells);++y)for(int x=ix*cells;x<std::min(nx-1,(ix+1)*cells);++x){
-   Vec p[8];float v[8];size_t ids[8];bool damage=false;
-   for(int i=0;i<8;++i){int xx=x+corners[i][0],yy=y+corners[i][1],zz=z+corners[i][2];size_t k=index(xx,yy,zz);ids[i]=k;p[i]=point(xx,yy,zz);v[i]=std::clamp(density[k],-spacing*2,spacing*2);if(std::abs(v[i])<.02f)v[i]=v[i]>0?.02f:-.02f;damage|=density[k]<base[k]-.01f;}
+   Vec p[8];float v[8];size_t ids[8];bool damage=false,hasAir=false,hasSolid=false;
+   for(int i=0;i<8;++i){int xx=x+corners[i][0],yy=y+corners[i][1],zz=z+corners[i][2];size_t k=index(xx,yy,zz);ids[i]=k;p[i]=point(xx,yy,zz);v[i]=density[k];hasAir|=v[i]<0;hasSolid|=v[i]>=0;damage|=density[k]<base[k]-excavationEpsilon;}
+   if(!hasAir||!hasSolid)continue;
    // Shared edges must execute identical floating-point arithmetic, even
    // when adjacent tetrahedra traverse that edge in opposite directions.
    auto edge=[&](int a,int b){if(ids[a]>ids[b])std::swap(a,b);return p[a]+(p[b]-p[a])*(v[a]/(v[a]-v[b]));};

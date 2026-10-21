@@ -1,5 +1,6 @@
 #pragma once
 #include "volume.h"
+#include <map>
 
 namespace lab {
 struct MapEdge { Vec a,b; int line=-1; };
@@ -33,6 +34,9 @@ private:
   Vec lo,hi;
  };
  std::vector<Region> regions;
+ struct ColumnRegion {size_t region;std::array<float,(tileCells+1)*(tileCells+1)> distances;};
+ // XY topology never moves with lifts. Cache distances independently of Z.
+ mutable std::map<std::array<int,2>,std::vector<ColumnRegion>> horizontalTiles;
  static float horizontal(const Region&,float x,float y);
 };
 }
