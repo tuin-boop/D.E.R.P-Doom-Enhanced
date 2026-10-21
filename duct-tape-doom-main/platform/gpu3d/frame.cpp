@@ -362,7 +362,8 @@ void releaseReflection() {
 
 using namespace gpu3d;
 void I_Render3DPresent(const unsigned *pixels,const unsigned *palette) {
-    const bool trace=M_CheckParm((char*)"-profilespikes")!=0;
+    const bool allFrames=M_CheckParm((char*)"-profileallframes")!=0;
+    const bool trace=allFrames||M_CheckParm((char*)"-profilespikes")!=0;
     static uint64_t previousEnd=0;
     uint64_t begin=trace?SDL_GetTicksNS():0,mark=begin;
     double stages[5]={};
@@ -449,7 +450,7 @@ void I_Render3DPresent(const unsigned *pixels,const unsigned *palette) {
     if(trace) {
         stage(4);auto end=SDL_GetTicksNS();
         double outside=previousEnd?(begin-previousEnd)/1e6:0,elapsed=(end-begin)/1e6;
-        if(previousEnd&&elapsed+outside>16.67)
+        if(previousEnd&&(allFrames||elapsed+outside>16.67))
             fprintf(stderr,"Frame spike tic %d: total %.3f outside %.3f acquire %.3f prepare %.3f upload %.3f draw %.3f submit %.3f ms\n",gametic,elapsed+outside,outside,stages[0],stages[1],stages[2],stages[3],stages[4]);
         previousEnd=SDL_GetTicksNS();
     }

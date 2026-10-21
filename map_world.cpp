@@ -8,7 +8,7 @@ namespace lab {
 static constexpr float extent=MapSource::tileCells*MapSource::step;
 TileKey MapWorld::key(Vec p){return {int(std::floor(p.x/extent)),int(std::floor(p.y/extent)),int(std::floor(p.z/extent))};}
 void MapWorld::reset(MapSource next){
- source=std::move(next);cuts.clear();planes.clear();cache.clear();
+ source=std::move(next);cuts.clear();planes.clear();cache.clear();columns.clear();
  for(const auto& r:source.topology())planes[r.sector]={r.floor,r.ceiling};
 }
 Vec MapWorld::center(const MapCut& cut)const{
@@ -54,7 +54,17 @@ float MapWorld::removal(Vec p)const{
  // strips on shallow gradients around unchanged grid nodes.
  return std::min(base-after-.00025f,-after-.00025f);
 }
-uint64_t MapWorld::skinStamp(Vec lo,Vec hi)const{
+uint64_t MapWorld::supportStamp(Vec p,float radius)const{
+ radius+=MapSource::step*2;
+ auto lo=key(p-Vec{radius,radius,0}),hi=key(p+Vec{radius,radius,0});
+ uint64_t stamp=1469598103934665603ULL;
+ for(int y=lo[1];y<=hi[1];++y)for(int x=lo[0];x<=hi[0];++x){
+  auto it=columns.find({x,y});stamp=(stamp^(it==columns.end()?0:it->second))*1099511628211ULL;
+ }
+ return stamp;
+}
+uint64_t MapWorld::skinStamp(Vec lo,Vec hi,bool* mayRemove)const{
+ bool changed=false,air=false;
  uint64_t stamp=1469598103934665603ULL;
  int x0=int(std::floor(lo.x/4)),y0=int(std::floor(lo.y/4)),z0=int(std::floor(lo.z/4));
  int x1=int(std::floor(hi.x/4))+1,y1=int(std::floor(hi.y/4))+1,z1=int(std::floor(hi.z/4))+1;
@@ -63,9 +73,10 @@ uint64_t MapWorld::skinStamp(Vec lo,Vec hi)const{
   Vec p{float(x)*4,float(y)*4,float(z)*4};auto k=key(p);
   if(k!=previous){auto it=cache.find(k);volume=it!=cache.end()&&it->second.edited?&it->second.volume:nullptr;previous=k;}
   uint32_t a=0,b=0;
-  if(volume){auto i=volume->index(x-k[0]*16,y-k[1]*16,z-k[2]*16);std::memcpy(&a,&volume->base[i],4);std::memcpy(&b,&volume->density[i],4);}
+  if(volume){auto i=volume->index(x-k[0]*16,y-k[1]*16,z-k[2]*16);std::memcpy(&a,&volume->base[i],4);std::memcpy(&b,&volume->density[i],4);changed|=volume->density[i]<volume->base[i]-.00025f;air|=volume->density[i]<-.00025f;}
   stamp=(stamp^a)*1099511628211ULL;stamp=(stamp^b)*1099511628211ULL;
  }
+ if(mayRemove)*mayRemove=changed&&air;
  return stamp;
 }
 bool MapWorld::affected(Vec p,float radius,float height)const{
@@ -121,12 +132,14 @@ void MapWorld::update(TileKey k,WorldTile& tile,bool incremental){
    next.chunks=std::move(oldChunks);tile.edited=changed;return;
   }
   for(auto& c:next.chunks)c.dirty=true;
-  next.rebuild();tile.revision=++nextRevision;
+  next.rebuild();tile.revision=++nextRevision;columns[{k[0],k[1]}]=nextRevision;
  }
  tile.edited=tile.edited||changed;
 }
 const WorldTile& MapWorld::tile(TileKey k){
- if(cache.size()>=512&&!cache.count(k)){
+ // Keep room for collision/support columns as well as excavated tiles.
+ // The 512-tile cap thrashed on ordinary maps with accumulated damage.
+ if(cache.size()>=2048&&!cache.count(k)){
   auto oldest=cache.end();
   for(auto it=cache.begin();it!=cache.end();++it)
    if(!it->second.edited&&(oldest==cache.end()||it->second.used<oldest->second.used))oldest=it;
@@ -161,6 +174,9 @@ bool MapWorld::heights(int sector,float floor,float ceiling){
  if(!source.heights(sector,floor,ceiling))return false;
  planes[sector]={floor,ceiling};
  Vec lo,hi;source.bounds(sector,lo,hi);
+ auto firstColumn=key(lo-Vec{8,8,0}),lastColumn=key(hi+Vec{8,8,0});
+ unsigned planeRevision=++nextRevision;
+ for(int y=firstColumn[1];y<=lastColumn[1];++y)for(int x=firstColumn[0];x<=lastColumn[0];++x)columns[{x,y}]=planeRevision;
  // A changed sector only affects tiles overlapping its XY footprint. Keep
  // tiles elsewhere (and their render caches) untouched while a door moves.
  for(auto& entry:cache){
@@ -172,7 +188,7 @@ bool MapWorld::heights(int sector,float floor,float ceiling){
    float now=plane?ceiling:floor,old=previous[plane];
    if(now!=old&&k[2]*extent<=std::max(now,old)+8&&(k[2]+1)*extent>=std::min(now,old)-8)affected=true;
   }
-  for(const auto& cut:cuts)if(!affected&&cut.sector==sector){
+  for(const auto& cut:cuts)if(!affected&&cut.sector==sector&&previous[cut.plane]!=planes[sector][cut.plane]){
    Vec now=center(cut),old=now;old.z+=previous[cut.plane]-planes[sector][cut.plane];
    float radius=cut.radius*std::max(1.f,cut.stretch)*1.06f+8;
    if(intersects(k,now,radius)||intersects(k,old,radius))affected=true;
@@ -180,7 +196,7 @@ bool MapWorld::heights(int sector,float floor,float ceiling){
   if(!affected)continue;
   update(k,entry.second);
  }
- for(const auto& cut:cuts)if(cut.sector==sector){
+ for(const auto& cut:cuts)if(cut.sector==sector&&previous[cut.plane]!=planes[sector][cut.plane]){
   Vec c=center(cut);float reach=cut.radius*std::max(1.f,cut.stretch)*1.06f+MapSource::step*2;
   auto first=key(c-Vec{reach,reach,reach}),last=key(c+Vec{reach,reach,reach});
   for(int z=first[2];z<=last[2];++z)for(int y=first[1];y<=last[1];++y)for(int x=first[0];x<=last[0];++x)tile({x,y,z});

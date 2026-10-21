@@ -152,6 +152,16 @@ void doorDamage(line_t *line,int side,fixed_t fx,fixed_t fy,fixed_t fz,int broke
             broken?1.2f:.4f,broken?randomRange(1.5f,3.f):1.f,color,broken?lighting(sides[line->sidenum[side]].sector):1.f});
     }
 }
+void solidBulletImpact(float x,float y,float z,float nx,float ny,float nz){
+    if(!settings.gunImpacts)return;
+    resetImpactLevel();
+    // The original wall callback may already have emitted this shot's burst.
+    for(const auto& p:gunPuffs)if(p.tic==leveltime){
+        float dx=x-p.x,dy=y-p.y,dz=z-p.z;
+        if(dx*dx+dy*dy+dz*dz<64)return;
+    }
+    uziImpact(x+nx*2,y+ny*2,z+nz*2,nx,ny,nz);
+}
 void surfaceChip(float x,float y,float z,float nx,float ny,float nz){
     dropOldLevelImpacts();
     float now=leveltime/(float)TICRATE;
@@ -370,6 +380,20 @@ extern "C" void I_TestImpactOptions() {
         tested=true;
     }
     if(!tested)I_Error("No wall for gun impact regression");
+    {
+        gunPuffs.clear();impactParticles.clear();
+        mobj_t puff={};puff.type=MT_PUFF;
+        puff.x=players[displayplayer].mo->x;puff.y=players[displayplayer].mo->y;puff.z=players[displayplayer].mo->z+32*FRACUNIT;
+        settings.gunImpacts=0;solidBulletImpact(units(puff.x),units(puff.y),units(puff.z),1,0,0);
+        if(!impactParticles.empty()||customGunPuff(&puff))I_Error("Disabled solid impact replaced classic puff");
+        settings.gunImpacts=1;solidBulletImpact(units(puff.x),units(puff.y),units(puff.z),1,0,0);
+        if(impactParticles.size()!=6||!customGunPuff(&puff))I_Error("Solid surface hit did not replace classic puff");
+        solidBulletImpact(units(puff.x),units(puff.y),units(puff.z),1,0,0);
+        if(impactParticles.size()!=6)I_Error("Solid callback duplicated existing wall effect");
+        puff.z+=24*FRACUNIT;if(!customGunPuff(&puff))I_Error("Rising solid puff escaped replacement");
+        puts("PASS solid hits replace legacy puffs, honor toggle and avoid duplicate wall bursts");
+    }
+
     impactParticles.clear();debris.clear();wallDecals.clear();scorches.clear();
     for(int i=0;i<100;++i)uziImpact(units(players[displayplayer].mo->x),units(players[displayplayer].mo->y),32,0,0,1);
     if(impactParticles.size()>512)I_Error("Uzi effects exceeded particle budget");

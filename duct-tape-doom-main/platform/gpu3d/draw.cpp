@@ -5,10 +5,15 @@
 namespace gpu3d {
 struct Arena { SDL_GPUBuffer *buffer=nullptr; Uint32 capacity=0; };
 static Arena vertexArena,blockerArena,sectorArena;
+struct ResidentVertices {Arena arena;std::vector<Vertex> snapshot;size_t count=0;unsigned revision=~0u,seen=0;uint64_t maskStamp=0;};
+static std::unordered_map<uint64_t,ResidentVertices> residentVertices;
+struct DrawSection {SDL_GPUBuffer* buffer;Uint32 offset,count;};
+static std::unordered_map<const std::vector<Vertex>*,std::vector<DrawSection>> residentBindings;
+static unsigned uploadSerial=0;
 static SDL_GPUTransferBuffer *frameTransfer;
 static Uint32 frameTransferCapacity;
-static std::unordered_map<const std::vector<Vertex>*,Uint32> vertexOffsets;
-// One copy pass per frame uploads every vertex batch and the light/sector data.
+
+// One copy pass uploads dynamic vertices, changed resident sections and light/sector data.
 static void reserve(Arena &arena,Uint32 bytes,SDL_GPUBufferUsageFlags usage) {
     if(arena.buffer&&arena.capacity>=bytes)return;
     if(arena.buffer)SDL_ReleaseGPUBuffer(device,arena.buffer);
@@ -20,22 +25,51 @@ static void reserve(Arena &arena,Uint32 bytes,SDL_GPUBufferUsageFlags usage) {
 void uploadFrame(SDL_GPUCommandBuffer *command,const std::vector<const std::vector<Vertex>*> &transient,
                  const std::vector<std::array<float,4>> &sectors,const unsigned *palette,const std::vector<unsigned> &hud,
                  const std::vector<unsigned> &panel) {
-    vertexOffsets.clear();Uint32 bytes=0;
-    auto place=[&](const std::vector<Vertex> &vertices) {
-        if(vertices.empty())return;
-        vertexOffsets[&vertices]=bytes;
-        bytes=(bytes+(Uint32)(vertices.size()*sizeof(Vertex))+255)&~Uint32(255);
+    residentBindings.clear();++uploadSerial;Uint32 bytes=0;
+    struct Pending {const Vertex* data;Uint32 size;SDL_GPUBuffer* buffer;Uint32 offset;};
+    std::vector<Pending> pending,dynamic;
+    Uint32 residentBytes=0;
+    const bool reuse=!M_CheckParm((char*)"-nostaticuploads");
+    auto place=[&](const std::vector<Vertex>& vertices){
+        if(vertices.empty()||residentBindings.count(&vertices))return;
+        auto& draws=residentBindings[&vertices];
+        auto stream=[&](size_t first,size_t count){
+            if(!count)return;Uint32 size=(Uint32)(count*sizeof(Vertex));
+            dynamic.push_back({vertices.data()+first,size,nullptr,bytes});draws.push_back({nullptr,bytes,(Uint32)count});
+            bytes=(bytes+size+255)&~Uint32(255);
+        };
+        auto sections=vertexSections.find(&vertices);size_t cursor=0;
+        if(reuse&&sections!=vertexSections.end())for(const auto& section:sections->second){
+            if(section.first<cursor||section.first+section.count>vertices.size())continue;
+            stream(cursor,section.first-cursor);
+            const Vertex* data=vertices.data()+section.first;Uint32 size=(Uint32)(section.count*sizeof(Vertex));
+            auto& cached=residentVertices[section.id];cached.seen=uploadSerial;
+            if(!cached.arena.buffer||cached.count!=section.count||cached.revision!=section.revision||cached.maskStamp!=section.maskStamp){
+                reserve(cached.arena,size,SDL_GPU_BUFFERUSAGE_VERTEX);
+                pending.push_back({data,size,cached.arena.buffer,residentBytes});
+                residentBytes=(residentBytes+size+255)&~Uint32(255);
+                cached.count=section.count;cached.revision=section.revision;cached.maskStamp=section.maskStamp;
+                if(M_CheckParm((char*)"-verifyresidentuploads"))cached.snapshot.assign(data,data+section.count);
+            }
+            if(M_CheckParm((char*)"-verifyresidentuploads")&&(cached.snapshot.size()!=section.count||memcmp(cached.snapshot.data(),data,size)))I_Error((char*)"Resident geometry differs from current CPU geometry");
+            draws.push_back({cached.arena.buffer,0,(Uint32)section.count});cursor=section.first+section.count;
+        }
+        stream(cursor,vertices.size()-cursor);
     };
     for(const auto *groups:{&batches,&shadowBatches,&decalBatches,&effectBatches,&effectAddBatches,&mirrorBatches})for(const auto &batch:*groups)place(batch.second);
     place(mistVertices);place(shaftVertices);place(particleVertices);place(heatVertices);place(skyVertices);place(glassVertices);
     for(const auto *vertices:transient)place(*vertices);
+    for(auto it=residentVertices.begin();it!=residentVertices.end();){
+        if(it->second.seen!=uploadSerial){SDL_ReleaseGPUBuffer(device,it->second.arena.buffer);it=residentVertices.erase(it);}else ++it;
+    }
     Uint32 blockerBytes=(Uint32)(lightWords.size()*sizeof(lightWords[0]));
     Uint32 sectorBytes=(Uint32)(sectors.size()*sizeof(sectors[0]));
     Uint32 vertexBytes=std::max<Uint32>(bytes,256);
     reserve(vertexArena,vertexBytes,SDL_GPU_BUFFERUSAGE_VERTEX);
     reserve(blockerArena,blockerBytes,SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
     reserve(sectorArena,sectorBytes,SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
-    Uint32 imageOffset=vertexBytes+blockerBytes+sectorBytes,hudBytes=(Uint32)(hud.size()*4);
+    Uint32 residentOffset=vertexBytes+blockerBytes+sectorBytes;
+    Uint32 imageOffset=residentOffset+residentBytes,hudBytes=(Uint32)(hud.size()*4);
     Uint32 panelBytes=(Uint32)(panel.size()*4),total=imageOffset+1024+hudBytes+panelBytes;
     if(!frameTransfer||frameTransferCapacity<total) {
         if(frameTransfer)SDL_ReleaseGPUTransferBuffer(device,frameTransfer);
@@ -45,10 +79,10 @@ void uploadFrame(SDL_GPUCommandBuffer *command,const std::vector<const std::vect
         if(!frameTransfer)I_Error((char*)"Could not allocate GPU frame upload: %s",SDL_GetError());
     }
     byte *mapped=(byte*)SDL_MapGPUTransferBuffer(device,frameTransfer,true);
-    for(const auto &entry:vertexOffsets)
-        memcpy(mapped+entry.second,entry.first->data(),entry.first->size()*sizeof(Vertex));
+    for(const auto& item:dynamic)memcpy(mapped+item.offset,item.data,item.size);
     memcpy(mapped+vertexBytes,lightWords.data(),blockerBytes);
     memcpy(mapped+vertexBytes+blockerBytes,sectors.data(),sectorBytes);
+    for(const auto& item:pending)memcpy(mapped+residentOffset+item.offset,item.data,item.size);
     memcpy(mapped+imageOffset,palette,1024);
     memcpy(mapped+imageOffset+1024,hud.data(),hudBytes);
     if(panelBytes)memcpy(mapped+imageOffset+1024+hudBytes,panel.data(),panelBytes);
@@ -60,6 +94,7 @@ void uploadFrame(SDL_GPUCommandBuffer *command,const std::vector<const std::vect
         SDL_UploadToGPUBuffer(copy,&source,&target,true);
     };
     if(bytes)send(0,vertexArena.buffer,bytes);
+    for(const auto& item:pending)send(residentOffset+item.offset,item.buffer,item.size);
     send(vertexBytes,blockerArena.buffer,blockerBytes);
     send(vertexBytes+blockerBytes,sectorArena.buffer,sectorBytes);
     auto image=[&](Uint32 offset,SDL_GPUTexture *texture,Uint32 w,Uint32 h) {
@@ -71,14 +106,15 @@ void uploadFrame(SDL_GPUCommandBuffer *command,const std::vector<const std::vect
     image(imageOffset+1024,hudTexture,SCREENWIDTH,SCREENHEIGHT*2);
     if(panelBytes)image(imageOffset+1024+hudBytes,settingsTexture,DOOM_SETTINGS_WIDTH,DOOM_SETTINGS_HEIGHT);
     SDL_EndGPUCopyPass(copy);
+    if(M_CheckParm((char*)"-profileuploads")&&gametic%10==0){size_t kept=0;for(const auto& entry:residentVertices)kept+=entry.second.count*sizeof(Vertex);printf("UPLOAD tic %d dynamic %u changed %u resident %zu batches %zu\n",gametic,bytes,residentBytes,kept,pending.size());}
 }
 void drawVertices(SDL_GPURenderPass *pass,const std::vector<Vertex> &vertices) {
     if(vertices.empty())return;
-    auto uploaded=vertexOffsets.find(&vertices);
-    if(uploaded==vertexOffsets.end())return;
-    SDL_GPUBufferBinding binding={vertexArena.buffer,uploaded->second};
-    SDL_BindGPUVertexBuffers(pass,0,&binding,1);
-    SDL_DrawGPUPrimitives(pass,(Uint32)vertices.size(),1,0,0);
+    auto found=residentBindings.find(&vertices);if(found==residentBindings.end())return;
+    for(const auto& section:found->second){
+        SDL_GPUBufferBinding binding={section.buffer?section.buffer:vertexArena.buffer,section.offset};
+        SDL_BindGPUVertexBuffers(pass,0,&binding,1);SDL_DrawGPUPrimitives(pass,section.count,1,0,0);
+    }
 }
 void setView(SDL_GPURenderPass *pass,float x,float y,float w,float h,const SDL_Rect *scissor) {
     SDL_GPUViewport viewport={x,y,w,h,0,1};SDL_SetGPUViewport(pass,&viewport);
@@ -200,7 +236,9 @@ void drawOverlays(SDL_GPUCommandBuffer *command,SDL_GPURenderPass *pass,const Fr
     }
 }
 void releaseFrameUploads() {
+    for(auto& entry:residentVertices)release(entry.second.arena.buffer,SDL_ReleaseGPUBuffer);
+    residentVertices.clear();residentBindings.clear();uploadSerial=0;
     for(Arena *a:{&vertexArena,&blockerArena,&sectorArena}) {release(a->buffer,SDL_ReleaseGPUBuffer);a->capacity=0;}
-    release(frameTransfer,SDL_ReleaseGPUTransferBuffer);frameTransferCapacity=0;vertexOffsets.clear();
+    release(frameTransfer,SDL_ReleaseGPUTransferBuffer);frameTransferCapacity=0;
 }
 } // namespace gpu3d

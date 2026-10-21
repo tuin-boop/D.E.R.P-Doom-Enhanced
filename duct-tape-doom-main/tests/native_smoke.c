@@ -1122,6 +1122,39 @@ void I_TestFrame(void)
         puts("PASS ordinary map: split linedef destruction, bidirectional shots and native player walking.");
         capture=gametic+4;return;
     }
+    if(getenv("DOOM_TEST_SOLID_PUFF")){
+        if(gamestate!=GS_LEVEL||gametic<25)return;
+        extern void I_TestImpactOptions(void);I_TestImpactOptions();I_Quit();return;
+    }
+    if(getenv("DOOM_TEST_GLASS_HEIGHT")){
+        if(gamestate!=GS_LEVEL||gametic<25)return;
+        extern void P_ZMovement(mobj_t*);
+        mobj_t puff={0};puff.type=MT_PUFF;puff.flags=MF_NOGRAVITY;
+        puff.z=32*FRACUNIT;puff.floorz=128*FRACUNIT;puff.ceilingz=256*FRACUNIT;puff.momz=FRACUNIT;
+        P_ZMovement(&puff);
+        if(puff.z!=33*FRACUNIT)I_Error("Wall puff snapped up to original window floor");
+        puff.z=160*FRACUNIT;puff.floorz=0;puff.ceilingz=128*FRACUNIT;
+        P_ZMovement(&puff);
+        if(puff.z!=161*FRACUNIT)I_Error("Wall puff snapped down to original ceiling");
+        puts("PASS cosmetic puff retains impact height beside excavated sector planes");I_Quit();return;
+    }
+    if(getenv("DOOM_TEST_LAG5")){
+        static int started=-1,last=-1,captured=0;
+        if(gamestate!=GS_LEVEL||!players[0].mo)return;
+        player_t* p=&players[0];mobj_t* m=p->mo;
+        if(started<0){started=gametic;p->cheats|=CF_GODMODE;test_pursuit_guards();
+            printf("LAG5 start %.1f %.1f %.1f angle %u\n",m->x/(float)FRACUNIT,m->y/(float)FRACUNIT,m->z/(float)FRACUNIT,m->angle);}
+        int elapsed=gametic-started;
+        if(getenv("DOOM_TEST_SOLID_CAPTURE")&&!captured&&elapsed>=15){captured=1;I_Render3DScreenshotTo("lag5-before.png");}
+        if(elapsed>=35&&elapsed<140&&last!=gametic){
+            last=gametic;double angle=m->angle*(6.283185307179586/4294967296.0);
+            P_TryMove(m,m->x+(fixed_t)(cos(angle)*2*FRACUNIT),m->y+(fixed_t)(sin(angle)*2*FRACUNIT));
+            if(elapsed%10==0)printf("LAG5 walking tic %d at %.1f %.1f\n",gametic,m->x/(float)FRACUNIT,m->y/(float)FRACUNIT);
+        }
+        if(getenv("DOOM_TEST_SOLID_CAPTURE")&&captured==1&&elapsed>=220){captured=2;I_Render3DScreenshotTo("lag5-after.png");}
+        if(elapsed>=(getenv("DOOM_TEST_LAG5_LONG")?500:250)){puts("PASS lag5 walking playback");I_Quit();}
+        return;
+    }
     if(getenv("DOOM_TEST_LAG3")){
         static int started=-1,lastShot=-1;static angle_t originalAngle;
         if(gamestate!=GS_LEVEL||!players[0].mo)return;
@@ -1177,8 +1210,10 @@ void I_TestFrame(void)
                     printf("LAGBUTTON line %d special %d tag %d midpoint %.1f %.1f\n",i,l->special,l->tag,x,y);
             }
         }
-        if(gametic-started==20)P_UseLines(&players[0]);
-        if(getenv("DOOM_TEST_SOLID_CAPTURE")&&gametic-started==390)I_Render3DScreenshotTo("lagbutton-restored.png");
+        static int used=0;
+        if(!used&&gametic-started>=20){used=1;P_UseLines(&players[0]);}
+        static int captured=0;
+        if(getenv("DOOM_TEST_SOLID_CAPTURE")&&!captured&&gametic-started>=390){captured=1;I_Render3DScreenshotTo("lagbutton-restored.png");}
         if(gametic-started>=400){puts("PASS lagbutton playback");I_Quit();}
         return;
     }

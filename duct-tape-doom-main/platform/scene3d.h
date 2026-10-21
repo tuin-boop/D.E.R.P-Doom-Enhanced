@@ -182,6 +182,10 @@ extern float weaponProbe[24];
 extern std::vector<LightBlocker> lightBlockers;
 /* Texture keys: wall index >=0, WAD lump = -1-lump. */
 extern std::unordered_map<int,Image> images;
+// Stable identities for independently rebuilt mesh sections. Offsets describe
+// this frame's CPU batches; GPU residency validates the final vertex bytes.
+struct VertexSection {uint64_t id;size_t first,count;unsigned revision;uint64_t maskStamp=0;};
+extern std::map<const std::vector<Vertex>*,std::vector<VertexSection>> vertexSections;
 extern std::map<int,std::vector<Vertex>> batches,shadowBatches,decalBatches,effectBatches,effectAddBatches;
 // The sprites of the glass mirror pass, seen from the mirrored eye, the
 // player's own included (addThing in scene3d/geometry.cpp).
@@ -261,5 +265,3 @@ void saveScreenshot(const void *bgra,int width,int height,int stride);
 void updateTitle(int width,int height,const char *renderer);
 } // namespace doom3d
 #endif
-
-

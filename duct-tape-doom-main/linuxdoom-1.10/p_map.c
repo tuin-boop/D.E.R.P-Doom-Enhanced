@@ -1330,6 +1330,7 @@ P_LineAttack
         la_endfrac=solidFraction;
         if(damage>0){
             if(!SV_MapMode()||(t1->player?p_player_surface_damage:p_monster_surface_damage))SV_Impact(solidPoint,solidOwner,2.f);
+            if(R_SolidBulletImpact)R_SolidBulletImpact(solidPoint[0],solidPoint[1],solidPoint[2],solidPoint[3],solidPoint[4],solidPoint[5]);
             P_SpawnPuff((fixed_t)(solidPoint[0]*FRACUNIT),(fixed_t)(solidPoint[1]*FRACUNIT),(fixed_t)(solidPoint[2]*FRACUNIT));
         }
     }
@@ -1591,4 +1592,3 @@ P_ChangeSector
 	
     return nofit;
 }
-

@@ -264,6 +264,9 @@ void P_XYMovement (mobj_t* mo)
 //
 void P_ZMovement (mobj_t* mo)
 {
+    // An impact can lie below the original sector floor after excavation.
+    // Puffs are cosmetic: do not snap them up into a window or down from a rim.
+    if(mo->type==MT_PUFF&&SV_MapMode()){mo->z+=mo->momz;return;}
     fixed_t	dist;
     fixed_t	delta;
     
@@ -1020,4 +1023,3 @@ P_SpawnPlayerMissile
 
     P_CheckMissileSpawn (th);
 }
-

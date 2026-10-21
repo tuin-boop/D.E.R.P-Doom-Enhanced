@@ -1,0 +1,17 @@
+Tuin-Doom-Enhanced — door performance and impact fixes
+
+Download Tuin-Doom-Enhanced.exe and select your own Doom IWAD. Commercial game data is not included.
+
+Changes since October 20:
+- Reuse unchanged crater geometry and GPU buffers to reduce damaged-door overhead.
+- Improve local collision caching and geometry processing around accumulated destruction.
+- Spread costly monster pursuit searches across updates to reduce stutters around damaged geometry.
+- Check bullet height before breaking glass; shots below or above a pane leave it intact.
+- Prevent cosmetic bullet puffs from snapping to original sector floors/ceilings.
+- Apply the new impact effects to excavated surfaces, suppressing duplicate classic puffs when enabled, including with wall damage disabled.
+
+Retains the previous destruction features, settings, HUD, and bundled mods. Existing save/settings folders remain compatible. Older releases are preserved.
+
+Validation: saved-game door opening/closing and plasma replays, retained-geometry comparisons, pursuit guards, glass-height and impact-toggle regression checks. Performance improvements are scene-dependent; this is not a guarantee of 10 ms frame times.
+
+Based on Duct-Tape DOOM, the engine and renderer by Robert Heidenreich: https://github.com/robongrui/duct-tape-doom. Original Doom by id Software. Existing third-party credits and licenses are retained.

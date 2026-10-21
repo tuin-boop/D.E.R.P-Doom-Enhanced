@@ -197,6 +197,8 @@ void glassShot(line_t *line,fixed_t x,fixed_t y,fixed_t z,fixed_t dx,fixed_t dy)
     if(!line||!glassReady())return;
     int pane=paneOfLine[line-lines];
     if(pane<0||panes[pane].broken)return;
+    float bottom,top;paneHeights(panes[pane],bottom,top);
+    if(units(z)<bottom||units(z)>top)return;
     shatter(panes[pane].frame,units(x),units(y),units(z),units(dx),units(dy));
 }
 // Explosions break windows within radius of the blast.
@@ -257,6 +259,22 @@ void watchGlass() {
         findWindows();
         // Through the glass ambience comes muffled until it breaks.
         for(const GlassPane &p:panes)I_AmbienceGlaze(p.line,1);
+    }
+    if(getenv("DOOM_TEST_GLASS_HEIGHT")){
+        static unsigned tested=~0u;
+        if(tested!=r_levelserial){
+            tested=r_levelserial;
+            auto found=std::find_if(panes.begin(),panes.end(),[](const GlassPane& p){return !p.broken;});
+            if(found==panes.end())I_Error("No intact pane for glass height test");
+            const GlassPane pane=*found;float bottom,top;paneHeights(pane,bottom,top);
+            fixed_t x=fixed_t((pane.ax+pane.bx)*.5f*FRACUNIT),y=fixed_t((pane.ay+pane.by)*.5f*FRACUNIT);
+            glassShot(&lines[pane.line],x,y,fixed_t((bottom-16)*FRACUNIT),FRACUNIT,0);
+            glassShot(&lines[pane.line],x,y,fixed_t((top+16)*FRACUNIT),FRACUNIT,0);
+            if(found->broken)I_Error("Shot outside pane height broke glass");
+            glassShot(&lines[pane.line],x,y,fixed_t((bottom+top)*.5f*FRACUNIT),FRACUNIT,0);
+            if(!found->broken)I_Error("Shot through pane failed to break glass");
+            puts("PASS glass ignores shots below/above pane and breaks on direct hit");
+        }
     }
     stepShards();
     if(panes.empty())return;

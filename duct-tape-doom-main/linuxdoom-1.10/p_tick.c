@@ -26,6 +26,9 @@
 static const char
 rcsid[] = "$Id: p_tick.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
+#include <time.h>
+#include <stdio.h>
+#include "m_argv.h"
 #include "z_zone.h"
 #include "p_local.h"
 #include "p_solid.h"
@@ -104,6 +107,7 @@ void P_RunThinkers (void)
 {
     thinker_t*	currentthinker;
 
+    const int profileSteps=M_CheckParm("-profilegamesteps");
     currentthinker = thinkercap.next;
     while (currentthinker != &thinkercap)
     {
@@ -117,7 +121,16 @@ void P_RunThinkers (void)
 	else
 	{
 	    if (currentthinker->function.acp1)
-		currentthinker->function.acp1 (currentthinker);
+		{
+            clock_t begin=profileSteps?clock():0;
+            int stateBefore=(profileSteps&&currentthinker->function.acp1==(actionf_p1)P_MobjThinker)?(int)(((mobj_t*)currentthinker)->state-states):-1;
+            currentthinker->function.acp1 (currentthinker);
+            if(profileSteps&&clock()-begin>CLOCKS_PER_SEC*.005){
+                int type=-1;
+                if(currentthinker->function.acp1==(actionf_p1)P_MobjThinker)type=((mobj_t*)currentthinker)->type;
+                printf("THINK tic %d type %d state %d %.3f ms\n",gametic,type,stateBefore,1000.0*(clock()-begin)/CLOCKS_PER_SEC);
+            }
+        }
 	}
 	currentthinker = currentthinker->next;
     }

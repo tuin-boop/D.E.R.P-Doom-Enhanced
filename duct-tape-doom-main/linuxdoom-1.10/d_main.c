@@ -1,3 +1,4 @@
+#include <time.h>
 #include "g_mapinfo.h"
 // Emacs style mode select   -*- C++ -*- 
 //-----------------------------------------------------------------------------
@@ -376,8 +377,10 @@ void D_DoomLoop (void)
 	
     I_InitGraphics ();
 
+    const int profileSteps=M_CheckParm("-profilegamesteps");
     while (1)
     {
+        clock_t stepStart=profileSteps?clock():0,stepTics,stepSound;
 	// frame syncronous IO operations
 	I_StartFrame ();                
 	
@@ -399,7 +402,11 @@ void D_DoomLoop (void)
 	    TryRunTics (); // will run at least one tic
 	}
 		
+        stepTics=profileSteps?clock():0;
 	S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
+        stepSound=profileSteps?clock():0;
+        if(profileSteps&&stepSound-stepStart>CLOCKS_PER_SEC*.008)
+            printf("GAME steps tic %d gameplay %.3f sound %.3f ms\n",gametic,1000.0*(stepTics-stepStart)/CLOCKS_PER_SEC,1000.0*(stepSound-stepTics)/CLOCKS_PER_SEC);
 
 	// Update display, next frame, with current state.
 	D_Display ();
@@ -1234,4 +1241,3 @@ void D_DoomMain (void)
 
     D_DoomLoop ();  // never returns
 }
-

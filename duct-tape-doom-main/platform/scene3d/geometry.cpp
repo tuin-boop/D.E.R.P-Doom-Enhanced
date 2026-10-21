@@ -516,6 +516,8 @@ void geometry(const Uniforms &camera,float fraction) {
         std::vector<char> unused;
         visibleLeaves(camera,unused,unused,true);
     }
+    retainSolidAssembly();
+    vertexSections.clear();
     for(auto &batch:batches)batch.second.clear();
     for(auto &batch:shadowBatches)batch.second.clear();
     for(auto &batch:mirrorBatches)batch.second.clear();

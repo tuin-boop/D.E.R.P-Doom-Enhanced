@@ -1,3 +1,4 @@
+#include <time.h>
 /* Optional local obstacle navigation. Bounded work, no changes to actor/save
    layout, and no random-number consumption when disabled. */
 int p_persistentpursuit;
@@ -13,6 +14,7 @@ static pursuit_node_t pursuitNodes[PURSUIT_NODES];
 static mobj_t *pursuitSearchActor;
 static fixed_t pursuitOriginX,pursuitOriginY;
 static int pursuitBest,pursuitBestDistance,pursuitExpanded,pursuitLastWork;
+static int pursuitPending=-1,pursuitDirection;
 
 // Probe a short edge with the same collision, headroom and step restrictions
 // as walking. Restore actor coordinates before returning; no move is committed.
@@ -40,10 +42,12 @@ static int P_PursuitDistance(fixed_t x,fixed_t y,mobj_t *target)
 }
 static boolean P_PlanPursuit(mobj_t *actor,pursuit_t *route)
 {
+    clock_t planStart=clock();
     int center=PURSUIT_NODES/2,n;
     static const int dx[4]={1,0,-1,0},dy[4]={0,1,0,-1};
     if(!pursuitSearchActor){
         pursuitSearchActor=actor;pursuitOriginX=actor->x;pursuitOriginY=actor->y;
+        pursuitPending=-1;pursuitDirection=0;
         pursuitBest=center;pursuitBestDistance=P_PursuitDistance(actor->x,actor->y,actor->target);pursuitExpanded=0;
         memset(pursuitNodes,0,sizeof(pursuitNodes));
         pursuitNodes[center].state=1;pursuitNodes[center].parent=-1;pursuitNodes[center].z=actor->z;
@@ -52,11 +56,14 @@ static boolean P_PlanPursuit(mobj_t *actor,pursuit_t *route)
     fixed_t ox=pursuitOriginX,oy=pursuitOriginY;
     int best=pursuitBest,bestDistance=pursuitBestDistance;
     boolean finished=false;
-    // Incremental search: only 24 node expansions across all monsters per tic.
+    // Bound both node count and elapsed work: damaged geometry makes a node
+    // much more expensive than an ordinary map probe. Resume the same search
+    // on a later update without weakening its collision checks.
     // Waiting actors stop their smooth substeps until their route is ready.
     for(int work=0;work<24&&pursuitExpanded<160;++work,++pursuitExpanded){
-        int current=-1,score=0x7fffffff;
-        for(n=0;n<PURSUIT_NODES;++n)if(pursuitNodes[n].state==1){
+        if(work>0&&clock()-planStart>=CLOCKS_PER_SEC/500)break;
+        int current=pursuitPending,score=0x7fffffff;
+        if(current<0)for(n=0;n<PURSUIT_NODES;++n)if(pursuitNodes[n].state==1){
             fixed_t x=ox+(n%PURSUIT_GRID-16)*PURSUIT_STEP,y=oy+(n/PURSUIT_GRID-16)*PURSUIT_STEP;
             int f=pursuitNodes[n].g+P_PursuitDistance(x,y,actor->target);
             if(f<score){score=f;current=n;}
@@ -68,7 +75,13 @@ static boolean P_PlanPursuit(mobj_t *actor,pursuit_t *route)
         int distance=P_PursuitDistance(x,y,actor->target);
         if(distance<bestDistance){bestDistance=distance;best=current;}
         if(distance<=64){best=current;finished=true;break;}
-        for(int d=0;d<4;++d){
+        for(int d=pursuitPending>=0?pursuitDirection:0;d<4;++d){
+            if(clock()-planStart>=CLOCKS_PER_SEC/500){
+                pursuitPending=current;pursuitDirection=d;
+                pursuitBest=best;pursuitBestDistance=bestDistance;pursuitLastWork=leveltime;
+                if(M_CheckParm("-profilegamesteps"))printf("PURSUIT yield tic %d %.3f ms\n",gametic,1000.0*(clock()-planStart)/CLOCKS_PER_SEC);
+                return false;
+            }
             int nx=cx+dx[d],ny=cy+dy[d];fixed_t z;
             if(nx<0||ny<0||nx>=PURSUIT_GRID||ny>=PURSUIT_GRID)continue;
             int index=ny*PURSUIT_GRID+nx; pursuit_node_t *next=&pursuitNodes[index];
@@ -76,14 +89,17 @@ static boolean P_PlanPursuit(mobj_t *actor,pursuit_t *route)
             if(!P_PursuitEdge(actor,x,y,node->z,x+dx[d]*PURSUIT_STEP,y+dy[d]*PURSUIT_STEP,&z))continue;
             next->g=node->g+32;next->parent=current;next->z=z;next->state=1;
         }
+        pursuitPending=-1;
     }
+    if(M_CheckParm("-profilegamesteps"))printf("PURSUIT tic %d %.3f ms\n",gametic,1000.0*(clock()-planStart)/CLOCKS_PER_SEC);
     pursuitBest=best;pursuitBestDistance=bestDistance;pursuitLastWork=leveltime;
     if(!finished&&pursuitExpanded<160)return false;
-    pursuitSearchActor=NULL;
+    pursuitSearchActor=NULL;pursuitPending=-1;
     int reversed[PURSUIT_NODES],length=0;
     for(n=best;n!=center&&n>=0&&length<PURSUIT_NODES;n=pursuitNodes[n].parent)reversed[length++]=n;
     while(length&&route->count<32){n=reversed[--length];int i=route->count++;
         route->x[i]=ox+(n%PURSUIT_GRID-16)*PURSUIT_STEP;route->y[i]=oy+(n/PURSUIT_GRID-16)*PURSUIT_STEP;}
+    if(M_CheckParm("-profilegamesteps"))printf("PURSUIT complete tic %d nodes %d waypoints %d\n",gametic,pursuitExpanded,route->count);
     route->retry=leveltime+TICRATE;return true;
 }
 boolean P_PersistentPursuit(mobj_t *actor)

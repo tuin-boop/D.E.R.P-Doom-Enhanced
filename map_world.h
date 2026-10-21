@@ -30,7 +30,8 @@ public:
  const std::map<TileKey,WorldTile>& tiles()const{return cache;}
  size_t cutCount()const{return cuts.size();}
  unsigned revision()const{return nextRevision;}
- uint64_t skinStamp(Vec lo,Vec hi)const;
+ uint64_t supportStamp(Vec point,float radius)const;
+ uint64_t skinStamp(Vec lo,Vec hi,bool* mayRemove=nullptr)const;
  bool solidOwner(Vec p,int& sector,int& plane,float& anchor)const{return source.solidOwner(p,sector,plane,anchor);}
  float originalDepth(Vec p)const{return source.depth(p);}
 private:
@@ -38,6 +39,7 @@ private:
  std::vector<MapCut> cuts;
  std::map<int,std::array<float,2>> planes;
  std::map<TileKey,WorldTile> cache;
+ std::map<std::array<int,2>,unsigned> columns;
  unsigned nextRevision=0;
  uint64_t clock=0;
  Vec center(const MapCut&)const;

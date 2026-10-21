@@ -487,17 +487,23 @@ void selectFogLights(const Uniforms &camera) {
 // A sphere that misses a triangle's bounds cannot illuminate any fragment
 // of it. The conservative mask preserves every light inside its radius.
 void assignLightMasks() {
-    struct Job {Vertex *vertices;size_t count;};
+    struct Job {Vertex *vertices;size_t count;VertexSection* section;uint64_t stamp=0;};
     static std::vector<Job> jobs;jobs.clear();size_t triangles=0;
     for(auto *group:{&batches,&mirrorBatches})for(auto &batch:*group) {
         auto &vertices=batch.second;
-        for(size_t n=0;n+2<vertices.size();n+=768) {
-            size_t count=std::min(size_t(768),(vertices.size()-n)/3*3);
-            jobs.push_back({vertices.data()+n,count});triangles+=count/3;
+        auto add=[&](size_t first,size_t end,VertexSection* section){
+            for(size_t n=first;n+2<end;n+=768){size_t count=std::min(size_t(768),(end-n)/3*3);jobs.push_back({vertices.data()+n,count,section});triangles+=count/3;}
+        };
+        auto sections=vertexSections.find(&vertices);size_t cursor=0;
+        if(sections!=vertexSections.end())for(auto& section:sections->second){
+            if(section.first<cursor||section.first+section.count>vertices.size())continue;
+            add(cursor,section.first,nullptr);section.maskStamp=1469598103934665603ULL;
+            add(section.first,section.first+section.count,&section);cursor=section.first+section.count;
         }
+        add(cursor,vertices.size(),nullptr);
     }
     auto assign=[&](int index) {
-        auto &job=jobs[index];auto vertices=job.vertices;
+        auto &job=jobs[index];auto vertices=job.vertices;job.stamp=1469598103934665603ULL;
         for(size_t n=0;n<job.count;n+=3) {
             unsigned mask[2]={};
             if(!(vertices[n].mode&MODE_SPRITE)||(vertices[n].mode&MODE_RELIT)) {
@@ -509,11 +515,13 @@ void assignLightMasks() {
                     if(!fogOnly[i]&&doom_flash_reaches_bounds(&light,low,high))mask[i/32]|=1u<<(i%32);
                 }
             }
+            job.stamp=(job.stamp^mask[0])*1099511628211ULL;job.stamp=(job.stamp^mask[1])*1099511628211ULL;
             for(size_t v=n;v<n+3;++v)std::copy(mask,mask+2,vertices[v].lightMask);
         }
     };
     if(triangles*flashes.count>=65536)frameParallelFor((int)jobs.size(),assign);
     else for(int n=0;n<(int)jobs.size();++n)assign(n);
+    for(const auto& job:jobs)if(job.section)job.section->maskStamp=(job.section->maskStamp^job.stamp)*1099511628211ULL;
     if(M_CheckParm((char*)"-verifylightthreads"))for(int n=0;n<(int)jobs.size();++n) {
         const auto &job=jobs[n];std::vector<std::array<unsigned,2>> expected(job.count);
         for(size_t v=0;v<job.count;++v)std::copy(job.vertices[v].lightMask,job.vertices[v].lightMask+2,expected[v].begin());

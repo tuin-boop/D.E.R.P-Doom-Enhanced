@@ -28,6 +28,7 @@ FlashSet flashes;
 FogLights fogLights;
 std::vector<LightBlocker> lightBlockers;
 std::unordered_map<int,Image> images;
+std::map<const std::vector<Vertex>*,std::vector<VertexSection>> vertexSections;
 std::map<int,std::vector<Vertex>> batches,shadowBatches,decalBatches,effectBatches,effectAddBatches,mirrorBatches;
 std::vector<Vertex> mistVertices,particleVertices,heatVertices,skyVertices,shaftVertices;
 GpuTextureRef seamTexture,contactTexture,cloudTexture,wallBakeTexture,flatLightTexture,causticTexture,causticPattern,shoreTexture;
@@ -116,6 +117,7 @@ void applySettings() {
     R_DoorMotion=settings.accelerated?doorMotion:nullptr;
     R_CraterCrumble=settings.accelerated?craterCrumble:nullptr;
     R_SurfaceChip=settings.accelerated?surfaceChip:nullptr;
+    R_SolidBulletImpact=settings.accelerated?solidBulletImpact:nullptr;
     R_DoorDamage=nullptr;
     R_WallImpact=settings.accelerated?wallImpact:nullptr;
     R_DamageHit=settings.accelerated?bodyDamaged:nullptr;
@@ -152,9 +154,9 @@ void sceneInit(SDL_Window *window) {
 void sceneShutdown() {
     toastyTexture.reset();toastyVisible=0;
     stopRelight();
-    R_AcceleratedView=nullptr;R_BeforeTic=nullptr;R_MuzzleFlash=nullptr;R_WallImpact=nullptr;R_RocketImpact=nullptr;R_BFGHit=nullptr;R_DoorMotion=nullptr;R_DoorDamage=nullptr;R_CraterCrumble=nullptr;R_SurfaceChip=nullptr;R_DamageHit=nullptr;R_BloodHit=nullptr;R_PlaneImpact=nullptr;R_ShotPassed=nullptr;r_uncapped=0;v_overlayactive=0;
+    R_AcceleratedView=nullptr;R_BeforeTic=nullptr;R_MuzzleFlash=nullptr;R_WallImpact=nullptr;R_RocketImpact=nullptr;R_BFGHit=nullptr;R_DoorMotion=nullptr;R_DoorDamage=nullptr;R_CraterCrumble=nullptr;R_SurfaceChip=nullptr;R_SolidBulletImpact=nullptr;R_DamageHit=nullptr;R_BloodHit=nullptr;R_PlaneImpact=nullptr;R_ShotPassed=nullptr;r_uncapped=0;v_overlayactive=0;
     lightBlockers.clear();flashes={};oldThings.clear();oldHeights.clear();
-    batches.clear();shadowBatches.clear();decalBatches.clear();effectBatches.clear();effectAddBatches.clear();mirrorBatches.clear();particleVertices.clear();
+    vertexSections.clear();batches.clear();shadowBatches.clear();decalBatches.clear();effectBatches.clear();effectAddBatches.clear();mirrorBatches.clear();particleVertices.clear();
     mistVertices.clear();skyVertices.clear();shaftVertices.clear();heatVertices.clear();
     imagesShutdown();mapShutdown();causticsShutdown();clearSurfaceLights();lightsShutdown();exposureShutdown();
     bakeAtlasShutdown();sunShutdown();lightBakeShutdown();clearStaticGrid();indirectShutdown();
@@ -165,7 +167,7 @@ void sceneShutdown() {
 static void startLevel() {
     loadingStage(LoadStage::Map);
     stopRelight();
-    batches.clear();shadowBatches.clear();mirrorBatches.clear();clearSurfaceLights();shotLightsShutdown();
+    vertexSections.clear();batches.clear();shadowBatches.clear();mirrorBatches.clear();clearSurfaceLights();shotLightsShutdown();
     bakeAtlasNewLevel();sunNewLevel();lightBakeNewLevel();clearStaticGrid();indirectNewLevel();
     oldThings.clear();oldHeights.clear();tickTime=0;
     resetWeaponPositions();

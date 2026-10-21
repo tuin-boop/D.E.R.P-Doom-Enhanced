@@ -21,6 +21,8 @@ The latest release adds shared solid-volume destruction for walls, doors, floors
 
 This release includes the latest plasma-impact, homemade-stair and moving-door performance fixes, repaired shallow-crater rims, floating-stain cleanup and restored shootable-glass handling. Small clipped surface fragments have also been corrected.
 
+The October 21 update reuses unchanged crater geometry on the CPU and GPU, reduces damaged-door processing, and spreads expensive monster route searches across updates. It also fixes glass hit-height checks and makes the new gun-impact effects replace legacy puffs on excavated surfaces. Further performance tuning is ongoing.
+
 Earlier releases remain available in [release history](https://github.com/tuin-boop/Tuin-Doom-Enhanced/releases). Save and settings folders retain their previous internal names for compatibility.
 
 Compatible classic/Boom map WADs are supported; arbitrary GZDoom/UDMF maps and general ZScript are not supported. Destruction can bypass keys and map progression. Performance remains dependent on map complexity and accumulated damage.

@@ -112,7 +112,9 @@ void SV_SectorChanged(sector_t *s){
  int i=int(s-sectors);if(i<0||i>=numsectors)return;
  if(mapHeights[i][0]==s->floorheight&&mapHeights[i][1]==s->ceilingheight)return;
  mapHeights[i]={s->floorheight,s->ceilingheight};
+ auto begin=std::chrono::steady_clock::now();
  mapWorld.heights(i,unit(s->floorheight),unit(s->ceilingheight));
+ if(M_CheckParm((char*)"-profilesolid"))printf("SOLID sector %d tic %d %.3f ms\n",i,gametic,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count());
 }
 int SV_Slide(mobj_t* m){
  if(!SV_MapPosition(m,m->x+m->momx,m->y+m->momy))return 0;
@@ -175,23 +177,24 @@ static int solidPositionUncached(mobj_t *m,fixed_t x,fixed_t y,fixed_t *floor,fi
 int SV_Position(mobj_t *m,fixed_t x,fixed_t y,fixed_t *floor,fixed_t *ceiling){
  if(!SV_Active())return -1;
  if(!SV_MapMode())return solidPositionUncached(m,x,y,floor,ceiling);
- struct Support {std::array<fixed_t,6> query{};unsigned revision=~0u;int result=-1;fixed_t floor=0,ceiling=0;};
+ struct Support {std::array<fixed_t,6> query{};uint64_t revision=~uint64_t(0);int result=-1;fixed_t floor=0,ceiling=0;};
  static std::map<mobj_t*,Support> supports;
  static unsigned level=~0u;
  if(level!=r_levelserial||supports.size()>4096){supports.clear();level=r_levelserial;}
  auto& support=supports[m];
  std::array<fixed_t,6> query{x,y,m->z,m->height,m->radius,m->flags&MF_MISSILE};
- if(support.query==query&&support.revision==mapWorld.revision()){
+ auto stamp=mapWorld.supportStamp({unit(x),unit(y),unit(m->z)},unit(m->radius));
+ if(support.query==query&&support.revision==stamp){
   if(support.result==1){*floor=support.floor;*ceiling=support.ceiling;}
   return support.result;
  }
  int result=solidPositionUncached(m,x,y,floor,ceiling);
- support.query=query;support.revision=mapWorld.revision();support.result=result;
+ support.query=query;support.revision=mapWorld.supportStamp({unit(x),unit(y),unit(m->z)},unit(m->radius));support.result=result;
  if(result==1){support.floor=*floor;support.ceiling=*ceiling;}
  return result;
 }
 void SV_Refresh(mobj_t *m){
- if(!SV_Active())return;
+ if(!SV_Active()||m->type==MT_PUFF)return;
  // A spent, gravity-free projectile is only an explosion animation. Its
  // impact point may overlap the crater rim; trying to step its old collision
  // capsule out of that rim every tic is both unnecessary and expensive.
@@ -241,7 +244,13 @@ float SV_Trace(float x,float y,float z,float dx,float dy,float dz,float *point,i
  lab::Vec delta{dx,dy,dz};float distance=lab::length(delta);if(distance<.001f)return 1;
  lab::Hit hit;int selected;
  if(SV_MapMode()){
-  if(!mapWorld.ray({x,y,z},delta*(1/distance),distance,hit))return 1;
+  auto traceStart=std::chrono::steady_clock::now();
+  bool traced=mapWorld.ray({x,y,z},delta*(1/distance),distance,hit);
+  if(M_CheckParm((char*)"-profilegamesteps")){
+   double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-traceStart).count();
+   if(ms>2)printf("SOLID trace tic %d range %.1f %.3f ms\n",gametic,distance,ms);
+  }
+  if(!traced)return 1;
   selected=0;
  }else if(!scene.ray({x,y,z},delta*(1/distance),distance,hit,selected))return 1;
  if(point){point[0]=hit.point.x;point[1]=hit.point.y;point[2]=hit.point.z;
@@ -275,7 +284,9 @@ static void impact(float *point,int owner,float radius,float depth=0){
     else if(entered){cap=std::max(0.f,d-4);break;}
    }
   }
+  auto blastStart=std::chrono::steady_clock::now();
   bool applied=mapWorld.blast(center,radius,sector,plane,anchor,origin,inward,cap,float(P_GlobalDigMaxDepth()),stretch);
+  if(M_CheckParm((char*)"-profilesolid"))printf("SOLID map blast tic %d radius %.2f depth %.2f: %.3f ms\n",gametic,radius,depth,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-blastStart).count());
   if(M_CheckParm((char*)"-profilesolid"))printf("MAP cut applied %d center %.2f %.2f %.2f sample %.2f\n",
    int(applied),center.x,center.y,center.z,mapWorld.sample(origin+inward*.5f));
   if(depth>0&&depth<=.5f&&R_SurfaceChip)R_SurfaceChip(point[0],point[1],point[2],point[3],point[4],point[5]);

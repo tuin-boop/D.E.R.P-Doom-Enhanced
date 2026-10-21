@@ -61,6 +61,7 @@ void (*R_RocketImpact)(mobj_t *rocket);
 void (*R_DoorMotion)(sector_t *sector);
 void (*R_CraterCrumble)(float x,float y,float z);
 void (*R_SurfaceChip)(float x,float y,float z,float nx,float ny,float nz);
+void (*R_SolidBulletImpact)(float x,float y,float z,float nx,float ny,float nz);
 void (*R_DoorDamage)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z, int broken);
 void (*R_WallImpact)(line_t *line, int side, fixed_t x, fixed_t y, fixed_t z);
 void (*R_DamageHit)(mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage);
