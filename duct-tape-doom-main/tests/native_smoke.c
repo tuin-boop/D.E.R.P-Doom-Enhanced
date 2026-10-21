@@ -64,6 +64,25 @@ static void test_notices(void){
     if(notice_count(N_FISTS)!=1)I_Error("Tough fist kill notice");
     P_NoticeLevel();p->health=5;P_NoticeDamage(p,1,&target);leveltime=((leveltime/35)+6)*35;
     P_NoticeTick(p);if(notice_count(N_CLOSE)!=1)I_Error("Close call after combat");
+    // All four awards remain spent after the old cooldown and across save/load.
+    p->readyweapon=wp_fist;
+    for(int n=0;n<3;++n)P_NoticeKill(p->mo,&target,&barrel);
+    P_NoticeKill(p->mo,&target,p->mo);while(P_PopNotice(0,&e)){}
+    P_SaveNotices(saved);P_NoticeNewGame();P_LoadNotices(saved,sizeof(saved));
+    leveltime+=35*30;
+    for(int n=0;n<3;++n)P_NoticeKill(p->mo,&target,&barrel);
+    P_NoticeKill(p->mo,&target,p->mo);
+    P_NoticeDamage(p,1,&target);leveltime=((leveltime/35)+6)*35;P_NoticeTick(p);
+    if(P_PopNotice(0,&e))I_Error("Once-per-map award replayed after save/load");
+    P_NoticeLevel();
+    for(int n=0;n<3;++n)P_NoticeKill(p->mo,&target,&barrel);
+    P_NoticeKill(p->mo,&target,p->mo);
+    P_NoticeDamage(p,1,&target);leveltime=((leveltime/35)+6)*35;P_NoticeTick(p);
+    int awards=0;while(P_PopNotice(0,&e))if(e.kind>=N_CLOSE&&e.kind<=N_FISTS)awards|=1<<(e.kind-N_CLOSE);
+    if(awards!=15)I_Error("New map did not reset combat awards");
+    P_NoticeLevel();p_noticecombat=0;P_NoticeKill(p->mo,&target,p->mo);
+    p_noticecombat=1;P_NoticeKill(p->mo,&target,p->mo);
+    if(notice_count(N_FISTS)!=1)I_Error("Disabled notices consumed award");
     P_NoticeLevel();P_NoticeDamage(p,1,p->mo);leveltime=((leveltime/35)+6)*35;
     P_NoticeTick(p);if(notice_count(N_CLOSE))I_Error("Self damage triggered close call");
     P_NoticeLevel();P_NoticeDamage(p,1,NULL);leveltime=((leveltime/35)+6)*35;
@@ -76,7 +95,7 @@ static void test_notices(void){
     P_NoticeTick(p);if(notice_count(N_CLOSE))I_Error("Legacy pending close call replayed");
     p->health=oldhealth;p->killcount=oldkills;p->readyweapon=oldweapon;leveltime=oldtime;
     P_NoticeNewGame();P_NoticeLevel();
-    puts("Special notices: variants, save persistence, boss hooks, combat grouping and cooldown passed.");
+    puts("Special notices: variants, save persistence, boss hooks, combat grouping and once-per-map awards passed.");
 }
 
 static int stage, saved_ammo, saved_health, player_flashes, enemy_flashes;

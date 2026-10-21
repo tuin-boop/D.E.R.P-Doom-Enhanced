@@ -46,7 +46,8 @@ void P_NoticeDamage(player_t* player,int damage,mobj_t* source){
         source!=player->mo&&(source->info->flags&MF_COUNTKILL)?2:0;
 }
 static void award(int i,int slot,int kind){
- if(leveltime>=progress[i].cooldown[slot]){P_Notice(i,kind,0);progress[i].cooldown[slot]=leveltime+35*20;}
+ // Keep the existing save fields: any old cooldown also means already awarded.
+ if(p_noticecombat&&!progress[i].cooldown[slot]){P_Notice(i,kind,0);progress[i].cooldown[slot]=1;}
 }
 void P_NoticeKill(mobj_t* source,mobj_t* target,mobj_t* inflictor){
  if(!(target->info->flags&MF_COUNTKILL)||!source||!source->player)return;
