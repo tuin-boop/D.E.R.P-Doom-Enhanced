@@ -678,7 +678,7 @@ void I_TestFrame(void)
                     monster->health=-10000;P_KillMobj(player,monster);P_RemoveMobj(monster);
                 }
                 unsigned hits=p_toasty_serial-before;
-                if(hits<70||hits>130)I_Error("Unexpected Toasty rate: %u/1000",hits);
+                if(hits<8||hits>35)I_Error("Unexpected Toasty rate: %u/1000",hits);
                 p_toasty_tic=leveltime-12;
                 int age=M_CheckParm("-toasty-age");
                 if(age&&age+1<myargc)p_toasty_tic=leveltime-atoi(myargv[age+1]);

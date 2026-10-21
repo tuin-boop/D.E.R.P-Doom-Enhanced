@@ -83,7 +83,7 @@ Compatible classic/Boom map WADs are supported; arbitrary GZDoom/UDMF maps and g
 - Completion messages for all kills, all secrets, all counted items and overall 100% completion. Empty categories do not independently award messages.
 - Combat notices for surviving a close call, multi-kills, barrel-chain kills, fist kills against tough monsters and a damage-free full completion. Repeatable combat events have cooldowns.
 - First-weapon discovery and completion tracking survive save/load appropriately. Combat notices can be disabled.
-- High-resolution **Toasty** portrait and sound with a 5% cosmetic chance on monster gib deaths; **F5 > TEST TOASTY** previews it. Cosmetic randomness does not consume Doom's gameplay RNG.
+- High-resolution **Toasty** portrait and sound with a 2% cosmetic chance on monster gib deaths; **F5 > TEST TOASTY** previews it. Cosmetic randomness does not consume Doom's gameplay RNG.
 
 ### Performance and diagnostics
 

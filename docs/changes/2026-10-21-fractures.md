@@ -5,6 +5,7 @@ Download Tuin-Doom-Enhanced.exe and select your own IWAD. Commercial game data i
 Standard defaults: 250% destruction damage; varied deaths, procedural falls, face-viewer deaths, death reactions and FluidMonsters are off. Fluid Weapons and its sounds remain enabled. Existing profiles retain saved settings; use F4 to change these options on an existing installation. Destruction damage does not increase damage dealt to monsters.
 
 Changes since the earlier October 21 release:
+- Toasty is rarer: 2% per monster gib death, down from 5%.
 - New recessed fracture shading, bloom, darkened crust and cooling for rocket, plasma and BFG impacts, extended to monster fireballs, green Baron/Knight shots, Arachnotron plasma and Revenant missiles.
 - Ground destruction beneath grounded projectile victims, including BFG spray and Cyberdemon rockets hitting a Spider Mastermind. Duplicate BFG spray cuts and rocket surface blasts are suppressed.
 - Repair shallow-crater see-through patches and align wall clipping with replacement geometry.
